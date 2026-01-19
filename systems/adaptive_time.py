@@ -69,8 +69,8 @@ class TiempoAdaptativo:
         """Obtiene el tiempo asignado para la siguiente pregunta."""
         tiempo_pred = self.predecir_tiempo(signo, respuestas_correctas, vidas, nivel)
         
-        # Ya no se suma tiempo extra - usar predicción directa para mayor dificultad
-        # tiempo_pred = tiempo_pred + 7.0  # DESACTIVADO
+        # Sumar 3 segundos extra según solicitud
+        tiempo_pred = tiempo_pred + 3.0
         
         # Combinar predicción con historial reciente
         if len(self.historial) >= 3:

@@ -7,7 +7,7 @@ import pygame
 
 # Constantes del juego
 SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 700
+SCREEN_HEIGHT = 600
 FPS = 60
 
 # Colores mejorados

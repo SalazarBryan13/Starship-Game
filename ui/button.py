@@ -177,3 +177,132 @@ class Button:
     def is_clicked(self, mouse_pos, mouse_clicked):
         """Verifica si el botón fue clickeado"""
         return self.rect.collidepoint(mouse_pos) and mouse_clicked
+
+
+class CircularButton:
+    """Clase para botones circulares con iconos dibujados"""
+    
+    def __init__(self, x, y, radius, icon_type, tooltip="", color=(0, 180, 220)):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.icon_type = icon_type  # 'gamepad', 'sound', 'power'
+        self.tooltip = tooltip
+        self.color = color
+        self.is_hovered = False
+        self.animation_progress = 0.0
+        
+    def update(self, mouse_pos):
+        """Actualiza el estado del botón (hover)"""
+        dx = mouse_pos[0] - self.x
+        dy = mouse_pos[1] - self.y
+        distance = (dx**2 + dy**2) ** 0.5
+        
+        was_hovered = self.is_hovered
+        self.is_hovered = distance <= self.radius
+        
+        if self.is_hovered and not was_hovered:
+            self.animation_progress = 0.0
+        elif self.is_hovered:
+            self.animation_progress = min(1.0, self.animation_progress + 0.1)
+        else:
+            self.animation_progress = max(0.0, self.animation_progress - 0.1)
+    
+    def _draw_icon(self, screen, cx, cy, size):
+        """Dibuja el icono correspondiente"""
+        import pygame
+        icon_color = self.color if self.is_hovered else WHITE
+        
+        if self.icon_type == 'gamepad':
+            # Dibujar gamepad simple
+            # Cuerpo del control
+            body_rect = pygame.Rect(cx - size//2, cy - size//4, size, size//2)
+            pygame.draw.rect(screen, icon_color, body_rect, 2, border_radius=4)
+            # D-pad izquierdo
+            pygame.draw.line(screen, icon_color, (cx - size//3, cy - 2), (cx - size//3, cy + 2), 2)
+            pygame.draw.line(screen, icon_color, (cx - size//3 - 4, cy), (cx - size//3 + 4, cy), 2)
+            # Botones derechos
+            pygame.draw.circle(screen, icon_color, (cx + size//4, cy - 3), 3)
+            pygame.draw.circle(screen, icon_color, (cx + size//4 + 6, cy), 3)
+            
+        elif self.icon_type == 'sound':
+            # Dibujar speaker
+            # Cono del speaker
+            points = [
+                (cx - size//4, cy - size//6),
+                (cx - size//4, cy + size//6),
+                (cx, cy + size//3),
+                (cx, cy - size//3)
+            ]
+            pygame.draw.polygon(screen, icon_color, points, 2)
+            # Ondas de sonido
+            for i in range(2):
+                offset = 6 + i * 5
+                pygame.draw.arc(screen, icon_color,
+                              (cx + 2, cy - size//3 + i*3, offset, size//2),
+                              -0.8, 0.8, 2)
+            
+        elif self.icon_type == 'power':
+            # Dibujar símbolo de power
+            pygame.draw.circle(screen, icon_color, (cx, cy), size//2 - 2, 2)
+            pygame.draw.line(screen, (15, 30, 50), (cx, cy - size//2 + 2), (cx, cy - 2), 4)
+            pygame.draw.line(screen, icon_color, (cx, cy - size//2 + 2), (cx, cy - 2), 2)
+    
+    def draw(self, screen):
+        """Dibuja el botón circular con estilo glassmorphism"""
+        import pygame
+        
+        base_color = (15, 30, 50)
+        border_color = self.color if self.is_hovered else (0, 150, 200)
+        
+        # Glow externo cuando hover
+        if self.is_hovered:
+            glow_surface = pygame.Surface((self.radius * 2 + 30, self.radius * 2 + 30), pygame.SRCALPHA)
+            for i in range(4):
+                alpha = int(40 - i * 10)
+                pygame.draw.circle(glow_surface, (*self.color, alpha), 
+                                 (self.radius + 15, self.radius + 15), self.radius + 10 - i*2)
+            screen.blit(glow_surface, (self.x - self.radius - 15, self.y - self.radius - 15))
+        
+        # Fondo del botón
+        button_surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(button_surface, (*base_color, 200), (self.radius, self.radius), self.radius)
+        
+        # Borde brillante
+        border_width = 3 if self.is_hovered else 2
+        pygame.draw.circle(button_surface, border_color, (self.radius, self.radius), self.radius, border_width)
+        
+        # Brillo superior
+        pygame.draw.arc(button_surface, (255, 255, 255, 60), 
+                       (3, 3, self.radius * 2 - 6, self.radius * 2 - 6), 
+                       0.5, 2.6, 2)
+        
+        screen.blit(button_surface, (self.x - self.radius, self.y - self.radius))
+        
+        # Dibujar icono
+        self._draw_icon(screen, self.x, self.y, int(self.radius * 0.8))
+        
+        # Etiqueta de texto siempre visible a la izquierda
+        if self.tooltip:
+            label_font = pygame.font.Font(None, 26)
+            label_color = self.color if self.is_hovered else (180, 180, 180)
+            label_surface = label_font.render(self.tooltip, True, label_color)
+            
+            # Posicionar etiqueta a la izquierda del botón
+            label_x = self.x - self.radius - label_surface.get_width() - 15
+            label_y = self.y - label_surface.get_height() // 2
+            
+            # Línea decorativa conectando etiqueta con botón
+            line_color = self.color if self.is_hovered else (60, 80, 100)
+            pygame.draw.line(screen, line_color,
+                           (label_x + label_surface.get_width() + 5, self.y),
+                           (self.x - self.radius - 3, self.y), 2)
+            
+            screen.blit(label_surface, (label_x, label_y))
+    
+    def is_clicked(self, mouse_pos, mouse_clicked):
+        """Verifica si el botón fue clickeado"""
+        dx = mouse_pos[0] - self.x
+        dy = mouse_pos[1] - self.y
+        distance = (dx**2 + dy**2) ** 0.5
+        return distance <= self.radius and mouse_clicked

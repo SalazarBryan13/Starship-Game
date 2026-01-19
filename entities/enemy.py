@@ -346,9 +346,9 @@ class Enemy:
             return Projectile(self.x + self.width // 2, self.y + self.height, 8, RED, False)
         return None
     
-    def take_damage(self):
+    def take_damage(self, amount=1):
         """El enemigo recibe daño"""
-        self.hp -= 1
+        self.hp -= amount
     
     def update(self):
         """Actualiza el estado del enemigo"""
