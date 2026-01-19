@@ -1,0 +1,2044 @@
+# -*- coding: utf-8 -*-
+"""
+Game - Clase principal del juego
+"""
+
+import pygame
+import random
+import math
+import os
+import json
+import sys
+
+from config import (
+    SCREEN_WIDTH, SCREEN_HEIGHT, FPS,
+    BLACK, WHITE, RED, DARK_RED, GREEN, DARK_GREEN,
+    BLUE, DARK_BLUE, YELLOW, GOLD, ORANGE, PURPLE, CYAN, PINK, SILVER,
+    DARK_PURPLE, STAR_COLOR,
+    L1_BG_START, L1_BG_END, L1_STAR,
+    L2_BG_START, L2_BG_END, L2_STAR,
+    L3_BG_START, L3_BG_END, L3_STAR,
+    LEVEL_CONFIG, KEY_TO_OPERATION, OPERATION_TO_KEY, ENEMIES_PER_LEVEL
+)
+from entities import Player, Enemy, Projectile
+from effects import Explosion, MenuParticle, FloatingMathSymbol
+from ui import Button, Slider
+from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada
+from visuals import SpaceObject
+
+
+class Game:
+    """Clase principal del juego"""
+    
+    def __init__(self):
+        self.fullscreen = False
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Operación Relámpago - Juego Educativo")
+        self.clock = pygame.time.Clock()
+        
+        # === FUENTES PIXEL ART PARA ESTÉTICA RETRO ===
+        # Intentar cargar la fuente pixel art PressStart2P
+        pixel_font_path = os.path.join(os.path.dirname(__file__), "fonts", "PressStart2P.ttf")
+        
+        try:
+            if os.path.exists(pixel_font_path):
+                # Fuentes pixel art (tamaños más pequeños porque PressStart2P es grande)
+                self.font_large = pygame.font.Font(pixel_font_path, 28)   # Título
+                self.font_medium = pygame.font.Font(pixel_font_path, 16)  # Subtítulos
+                self.font_small = pygame.font.Font(pixel_font_path, 12)   # Texto normal
+                self.font_tiny = pygame.font.Font(pixel_font_path, 8)     # Texto pequeño
+                self.font_pixel = pygame.font.Font(pixel_font_path, 32)   # Para efectos
+                self.font_button = pygame.font.Font(pixel_font_path, 14)  # Botones
+                print("✓ Fuente pixel art cargada correctamente")
+            else:
+                raise FileNotFoundError("Fuente no encontrada")
+        except Exception as e:
+            print(f"⚠ Usando fuentes de respaldo: {e}")
+            # Fallback a fuentes del sistema
+            self.font_large = pygame.font.Font(None, 56)
+            self.font_medium = pygame.font.Font(None, 36)
+            self.font_small = pygame.font.Font(None, 24)
+            self.font_tiny = pygame.font.Font(None, 18)
+            self.font_pixel = pygame.font.Font(None, 72)
+            self.font_button = pygame.font.Font(None, 50)
+        self.running = True
+        self.game_state = "menu"  # menu, controls, settings, level_intro, playing, paused, win, lose
+        self.sound_manager = SoundManager()
+        self.level_intro_timer = 0
+        self.menu_blink = 0
+        self.sound_volume = 1.0  # Volumen de sonido (0.0 a 1.0)
+        self.music_volume = 0.1  # Volumen de música (0.0 a 1.0)
+        self.paused = False
+        
+        # Variables para modo infinito con tiempo adaptativo ML
+        self.modo_infinito = False
+        self.tiempo_adaptativo = None
+
+        
+        # Inicializar botones del menú
+        self.menu_buttons = []
+        self.controls_buttons = []
+        self.settings_buttons = []
+        self.pause_buttons = []
+        self.sliders = []
+        self._init_menu_buttons()
+        
+        self.sliders = []
+        self._init_menu_buttons()
+        
+        # Generar estrellas de fondo (fijas)
+        self.stars = []
+        for _ in range(100):
+            self.stars.append((
+                random.randint(0, SCREEN_WIDTH),
+                random.randint(0, SCREEN_HEIGHT),
+                random.choice([1, 1, 1, 2, 2, 3]),  # tamaño
+                random.randint(50, 255)  # brillo
+            ))
+        
+        # Objetos espaciales decorativos
+        self.space_objects = []
+        
+        # Explosiones y efectos visuales
+        self.explosions = []
+        
+        self.explosions = []
+        
+        # Partículas del menú para animación dinámica - MÁS IMPACTANTE
+        self.menu_particles = []
+        # Estrellas fugaces - MUCHAS MÁS
+        for _ in range(15):
+            self.menu_particles.append(MenuParticle('star'))
+        # Polvo cósmico
+        for _ in range(50):
+            self.menu_particles.append(MenuParticle('dust'))
+        # Chispas de energía - MUCHAS MÁS
+        for _ in range(25):
+            self.menu_particles.append(MenuParticle('spark'))
+        
+        # Símbolos matemáticos flotantes - MÁS GRANDES Y VISIBLES
+        self.floating_math_symbols = []
+        for _ in range(12):
+            symbol = FloatingMathSymbol()
+            symbol.y = random.randint(100, SCREEN_HEIGHT - 100)
+            self.floating_math_symbols.append(symbol)
+        
+        # Temporizador para disparos automáticos del menú
+        self.menu_shoot_timer = 0
+        self.menu_projectiles = []
+        self.menu_explosions = []
+        
+        # SCREEN SHAKE para impacto visual
+        self.menu_screen_shake = 0
+        self.menu_shake_intensity = 0
+        
+        # Cargar imágenes del menú
+        self.menu_left_img = None
+        self.menu_right_img = None
+        try:
+            if os.path.exists("menu_left.png"):
+                self.menu_left_img = pygame.image.load("menu_left.png").convert_alpha()
+                # Escalar si es necesario (ajustar tamaño según diseño)
+                self.menu_left_img = pygame.transform.scale(self.menu_left_img, (150, 150))
+            
+            if os.path.exists("menu_right.png"):
+                self.menu_right_img = pygame.image.load("menu_right.png").convert_alpha()
+                # Escalar si es necesario
+                self.menu_right_img = pygame.transform.scale(self.menu_right_img, (150, 150))
+        except Exception as e:
+            print(f"Advertencia: No se pudieron cargar las imágenes del menú: {e}")
+        
+        self.reset_game()
+        
+        # Iniciar música del menú (desde 0.4s)
+        self.sound_manager.play_menu_music(self.music_volume)
+    
+    def _init_menu_buttons(self):
+        """Inicializa los botones del menú principal"""
+        button_width = 400  # Aumentado
+        button_height = 70  # Aumentado
+        button_spacing = 85  # Aumentado
+        start_y = 200  # Ajustado
+        center_x = SCREEN_WIDTH // 2
+        
+        # Colores monocromáticos
+        BTN_COLOR = (70, 70, 80)
+        BTN_HOVER = (120, 120, 130)
+        
+        # Botón Jugar (Modo Normal)
+        self.menu_buttons.append(Button(
+            center_x - button_width // 2,
+            start_y,
+            button_width,
+            button_height,
+            "MODO NIVELES",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="play"
+        ))
+        
+        # Botón Modo Infinito (NUEVO - con ML adaptativo)
+        self.menu_buttons.append(Button(
+            center_x - button_width // 2,
+            start_y + button_spacing,
+            button_width,
+            button_height,
+            "MODO INFINITO",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="infinity"
+        ))
+        
+        # Botón Controles
+        self.menu_buttons.append(Button(
+            center_x - button_width // 2,
+            start_y + button_spacing * 2,
+            button_width,
+            button_height,
+            "CONTROLES",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="controls"
+        ))
+        
+        # Botón Configurar Sonido
+        self.menu_buttons.append(Button(
+            center_x - button_width // 2,
+            start_y + button_spacing * 3,
+            button_width,
+            button_height,
+            "SONIDO",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="settings"
+        ))
+        
+        # Botón Salir
+        self.menu_buttons.append(Button(
+            center_x - button_width // 2,
+            start_y + button_spacing * 4,
+            button_width,
+            button_height,
+            "SALIR",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="exit"
+        ))
+
+        
+        # Botón Volver (para controles y settings) - posicionado más abajo
+        back_button_controls = Button(
+            center_x - button_width // 2,
+            SCREEN_HEIGHT - 90,
+            button_width,
+            button_height,
+            "VOLVER",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="back"
+        )
+        back_button_settings = Button(
+            center_x - button_width // 2,
+            SCREEN_HEIGHT - 90,
+            button_width,
+            button_height,
+            "VOLVER",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="back"
+        )
+        self.controls_buttons.append(back_button_controls)
+        self.settings_buttons.append(back_button_settings)
+        
+        # Botones del menú de pausa
+        pause_start_y = 180
+        self.pause_buttons.append(Button(
+            center_x - button_width // 2,
+            pause_start_y,
+            button_width,
+            button_height,
+            "REANUDAR",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="resume"
+        ))
+        self.pause_buttons.append(Button(
+            center_x - button_width // 2,
+            pause_start_y + button_spacing,
+            button_width,
+            button_height,
+            "CONTROLES",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="controls"
+        ))
+        self.pause_buttons.append(Button(
+            center_x - button_width // 2,
+            pause_start_y + button_spacing * 2,
+            button_width,
+            button_height,
+            "CONFIGURAR SONIDO",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="settings"
+        ))
+        self.pause_buttons.append(Button(
+            center_x - button_width // 2,
+            pause_start_y + button_spacing * 3,
+            button_width,
+            button_height,
+            "SALIR AL MENÚ",
+            self.font_button,
+            color=BTN_COLOR,
+            hover_color=BTN_HOVER,
+            icon="menu"
+        ))
+        
+        # Sliders para configuración de sonido
+        slider_width = 500
+        slider_height = 8
+        slider_x = center_x - slider_width // 2
+        music_slider_y = 220
+        sound_slider_y = 340
+        
+        self.music_slider = Slider(
+            slider_x, music_slider_y, slider_width, slider_height,
+            min_value=0.0, max_value=1.0, initial_value=self.music_volume,
+            color=(120, 120, 140)
+        )
+        self.sound_slider = Slider(
+            slider_x, sound_slider_y, slider_width, slider_height,
+            min_value=0.0, max_value=1.0, initial_value=self.sound_volume,
+            color=(120, 140, 120)
+        )
+    
+    def _sync_sliders(self):
+        """Sincroniza los valores de los sliders con las variables de volumen"""
+        if hasattr(self, 'music_slider'):
+            self.music_slider.value = self.music_volume
+        if hasattr(self, 'sound_slider'):
+            self.sound_slider.value = self.sound_volume
+    
+    def toggle_fullscreen(self):
+        """Alterna entre modo ventana y pantalla completa"""
+        self.fullscreen = not self.fullscreen
+        if self.fullscreen:
+            # Obtener resolución de pantalla completa
+            info = pygame.display.Info()
+            self.screen = pygame.display.set_mode(
+                (info.current_w, info.current_h),
+                pygame.FULLSCREEN
+            )
+        else:
+            # Volver a modo ventana
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    
+    def reset_game(self):
+        """Reinicia el juego"""
+        self.level = 1
+        self.player = Player(SCREEN_WIDTH // 2 - 25, SCREEN_HEIGHT - 80)
+        self.enemies = []  # Lista de enemigos (múltiples)
+        self.player_projectiles = []
+        self.enemy_projectiles = []
+        self.math_problem = None
+        self.feedback_text = ""
+        self.feedback_timer = 0
+        self.answer_cooldown = 0  # Cooldown entre respuestas (en frames)
+        self.question_timer = 600  # Temporizador de 10 segundos (600 frames a 60 FPS)
+        self.question_timer_max = 600  # Tiempo máximo en frames
+        self.explosions = []
+        self.oleada_infinita = 1  # Contador de oleadas en modo infinito
+        
+        # Mascota animada (robot que da ánimos)
+        self.mascota = MascotaAnimada()
+        
+        self.generate_enemies()
+        self.generate_problem()
+        self.generate_space_objects()
+    
+    def generate_enemies(self):
+        """Genera múltiples enemigos según el nivel actual"""
+        config = LEVEL_CONFIG[self.level]
+        num_enemies = ENEMIES_PER_LEVEL[self.level]
+        self.enemies = []
+        
+        # Distribuir enemigos horizontalmente
+        spacing = SCREEN_WIDTH // (num_enemies + 1)
+        start_x = spacing
+        
+        for i in range(num_enemies):
+            # Variar ligeramente la posición Y para más dinamismo
+            y_offset = random.randint(-20, 20)
+            enemy = Enemy(
+                start_x + i * spacing - 30,
+                100 + y_offset,  # Bajado para no tapar la UI superior
+                config["enemy_hp"],
+                config["enemy_speed"],
+                self.level
+            )
+            # Variar dirección inicial
+            enemy.direction = random.choice([-1, 1])
+            enemy.move_counter = random.randint(0, 30)
+            self.enemies.append(enemy)
+    
+    def generate_space_objects(self):
+        """Genera objetos espaciales decorativos según el nivel"""
+        self.space_objects = []
+        
+        # Asteroides
+        for _ in range(5 if self.level == 1 else 8 if self.level == 2 else 10):
+            self.space_objects.append(SpaceObject(
+                'asteroid',
+                random.randint(0, SCREEN_WIDTH),
+                random.randint(-200, SCREEN_HEIGHT),
+                self.level
+            ))
+        
+        # Planetas (menos frecuentes)
+        for _ in range(2 if self.level >= 2 else 1):
+            self.space_objects.append(SpaceObject(
+                'planet',
+                random.randint(0, SCREEN_WIDTH),
+                random.randint(-300, 0),
+                self.level
+            ))
+        
+        # Nebulosas (solo nivel 2 y 3)
+        if self.level >= 2:
+            for _ in range(3):
+                self.space_objects.append(SpaceObject(
+                    'nebula',
+                    random.randint(0, SCREEN_WIDTH),
+                    random.randint(-400, SCREEN_HEIGHT),
+                    self.level
+                ))
+        
+        # Cometas (solo nivel 3)
+        if self.level == 3:
+            for _ in range(2):
+                self.space_objects.append(SpaceObject(
+                    'comet',
+                    random.randint(0, SCREEN_WIDTH),
+                    random.randint(-500, -100),
+                    self.level
+                ))
+    
+    def generate_problem(self):
+        """Genera un nuevo problema matemático"""
+        config = LEVEL_CONFIG[self.level]
+        self.math_problem = MathProblem(config["num_range"])
+        
+        # En modo infinito, usar tiempo adaptativo ML
+        if self.modo_infinito and self.tiempo_adaptativo:
+            # Predecir tiempo usando el modelo ML
+            tiempo_segundos = self.tiempo_adaptativo.obtener_tiempo(
+                self.math_problem.operation,
+                self.player.correct_answers,
+                self.player.lives,
+                self.level
+            )
+            # Convertir segundos a frames (FPS = 60)
+            self.question_timer_max = int(tiempo_segundos * FPS)
+            self.question_timer = self.question_timer_max
+        else:
+            # Modo normal: timer fijo
+            self.question_timer = self.question_timer_max
+
+    
+    def handle_input(self, keys, events):
+        """Maneja la entrada del usuario"""
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = False
+        mouse_down = pygame.mouse.get_pressed()[0]
+        
+        # Procesar eventos
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Click izquierdo
+                    mouse_clicked = True
+            
+            if event.type == pygame.KEYDOWN:
+                # Tecla F11 para alternar pantalla completa (funciona en cualquier estado)
+                if event.key == pygame.K_F11:
+                    self.toggle_fullscreen()
+                    continue
+                
+                # Durante el juego - ESC para pausar (verificar primero para no interferir con WASD)
+                if self.game_state == "playing":
+                    if event.key == pygame.K_ESCAPE:
+                        self.game_state = "paused"
+                        self.paused = True
+                        continue  # Continuar para no procesar otras teclas
+                    # Verificar teclas de operaciones SOLO si estamos jugando
+                    if self.answer_cooldown == 0 and event.key in KEY_TO_OPERATION:
+                        operation = KEY_TO_OPERATION[event.key]
+                        self.process_answer(operation)
+                        continue
+                
+                # Menú principal - navegación con teclado
+                if self.game_state == "menu":
+                    if event.key == pygame.K_ESCAPE:
+                        self.running = False
+                    continue
+                
+                # Menú de pausa - ESC para reanudar
+                if self.game_state == "paused":
+                    if event.key == pygame.K_ESCAPE:
+                        self.game_state = "playing"
+                        self.paused = False
+                    continue
+                
+                # Pantallas de controles y settings - ESC para volver
+                if self.game_state in ["controls", "settings"]:
+                    if event.key == pygame.K_ESCAPE:
+                        if self.paused:
+                            self.game_state = "paused"
+                        else:
+                            self.game_state = "menu"
+                    continue
+                
+                # Introducción de nivel
+                if self.game_state == "level_intro":
+                    if event.key == pygame.K_SPACE or event.key == pygame.K_RETURN:
+                        self.game_state = "playing"
+                        self.paused = False
+                        # La música continúa desde el nivel anterior, no se reinicia
+                    continue
+                
+                # Tecla R para reiniciar
+                if event.key == pygame.K_r and self.game_state in ["win", "lose"]:
+                    self.game_state = "menu"
+                    self.sound_manager.play_menu_music(self.music_volume)
+                    self.paused = False
+                    continue
+        
+        # Manejar clicks en botones del menú
+        if self.game_state == "menu":
+            for i, button in enumerate(self.menu_buttons):
+                button.update(mouse_pos)
+                if button.is_clicked(mouse_pos, mouse_clicked):
+                    if i == 0:  # Jugar (Modo Normal)
+                        self.modo_infinito = False
+                        self.tiempo_adaptativo = None
+                        self.game_state = "level_intro"
+                        self.level_intro_timer = 180
+                        self.level = 1
+                        self.reset_game()
+                        self.sound_manager.change_level_music(1)
+                    elif i == 1:  # MODO INFINITO (con ML adaptativo)
+                        self.modo_infinito = True
+                        self.tiempo_adaptativo = TiempoAdaptativo()
+                        self.game_state = "level_intro"
+                        self.level_intro_timer = 180
+                        self.level = 1
+                        self.reset_game()
+                        self.sound_manager.change_level_music(1, self.music_volume)
+                    elif i == 2:  # Controles
+                        self.game_state = "controls"
+                    elif i == 3:  # Configurar Sonido
+                        self.game_state = "settings"
+                    elif i == 4:  # Salir
+                        self.running = False
+
+        
+        # Manejar clicks en botones de controles
+        elif self.game_state == "controls":
+            for button in self.controls_buttons:
+                button.update(mouse_pos)
+                if button.is_clicked(mouse_pos, mouse_clicked):
+                    if button.text == "VOLVER":
+                        self.game_state = "menu"
+        
+        # Manejar clicks en botones de settings y sliders
+        elif self.game_state == "settings":
+            # Actualizar sliders (importante: hacerlo antes de los botones)
+            self.music_slider.update(mouse_pos, mouse_down, mouse_clicked)
+            self.sound_slider.update(mouse_pos, mouse_down, mouse_clicked)
+            self.music_volume = self.music_slider.value
+            self.sound_volume = self.sound_slider.value
+            pygame.mixer.music.set_volume(self.music_volume)
+            
+            for button in self.settings_buttons:
+                button.update(mouse_pos)
+                if button.is_clicked(mouse_pos, mouse_clicked):
+                    if button.text == "VOLVER":
+                        if self.paused:
+                            self.game_state = "paused"
+                        else:
+                            self.game_state = "menu"
+        
+        # Manejar clicks en botones del menú de pausa
+        elif self.game_state == "paused":
+            for i, button in enumerate(self.pause_buttons):
+                button.update(mouse_pos)
+                if button.is_clicked(mouse_pos, mouse_clicked):
+                    if i == 0:  # Reanudar
+                        self.game_state = "playing"
+                        self.paused = False
+                    elif i == 1:  # Controles
+                        self.game_state = "controls"
+                    elif i == 2:  # Configurar Sonido
+                        self.game_state = "settings"
+                        self._sync_sliders()
+                    elif i == 3:  # Salir al Menú
+                        self.game_state = "menu"
+                        self.sound_manager.play_menu_music(self.music_volume)
+                        self.paused = False
+    
+    def process_answer(self, operation):
+        """Procesa la respuesta del jugador"""
+        # Calcular tiempo de respuesta ANTES de reiniciar el temporizador
+        # question_timer_max y question_timer están en frames → convertir a segundos
+        elapsed_frames = self.question_timer_max - self.question_timer
+        response_time = max(0.0, elapsed_frames / FPS)
+        
+        # Capturar tiempo total de la pregunta ANTES de reiniciar
+        total_time = self.question_timer_max / FPS  # Tiempo total en segundos
+        
+        # Obtener la tecla presionada
+        key_pressed = OPERATION_TO_KEY.get(operation, "UNKNOWN")
+
+        # Establecer cooldown antes de procesar (evita múltiples procesamientos)
+        self.answer_cooldown = 90  # 1.5 segundos a 60 FPS
+        
+        # Reiniciar el temporizador de la pregunta
+        self.question_timer = self.question_timer_max
+        
+        if self.math_problem.check_answer(operation):
+            # Respuesta correcta
+            self.player.correct_answers += 1
+            self.player.score += 10
+            self.feedback_text = "¡CORRECTO! +10"
+            self.feedback_timer = 60
+            self.feedback_color = GREEN
+            self.sound_manager.play_sound('correct', 0.3, self.sound_volume)
+            
+            # Activar celebración de la mascota y obtener bonus
+            bonus = self.mascota.celebrar()
+            if bonus > 0:
+                self.player.score += bonus
+                self.feedback_text = f"¡CORRECTO! +10 (BONUS +{bonus})"
+            
+            # El jugador dispara - un disparo dirigido a UN SOLO enemigo
+            if self.enemies:
+                # Encontrar el primer enemigo vivo para atacar
+                target_enemy = None
+                for enemy in self.enemies:
+                    if not enemy.is_dead():
+                        target_enemy = enemy
+                        break  # Solo atacar al primer enemigo vivo
+                
+                if target_enemy:
+                    # Crear proyectil desde la posición del jugador
+                    start_x = self.player.x + self.player.width // 2
+                    start_y = self.player.y
+                    projectile = Projectile(
+                        start_x, 
+                        start_y, 
+                        -8,  # Velocidad (negativa porque va hacia arriba)
+                        GREEN, 
+                        True,  # Es disparo del jugador
+                        target_enemy  # Enemigo objetivo (solo uno)
+                    )
+                    self.player_projectiles.append(projectile)
+                    self.sound_manager.play_sound('shoot', 0.2, self.sound_volume)
+        else:
+            # Respuesta incorrecta
+            self.player.incorrect_answers += 1
+            # Restar 5 puntos, sin bajar de 0
+            self.player.score = max(0, self.player.score - 5)
+            self.feedback_text = "¡INCORRECTO!"
+            self.feedback_timer = 60
+            self.feedback_color = RED
+            self.sound_manager.play_sound('wrong', 0.3, self.sound_volume)
+            
+            # Resetear racha de la mascota
+            self.mascota.reset_streak()
+            
+            # Los enemigos atacan - disparos dirigidos al jugador
+            if self.enemies:
+                # Solo un enemigo dispara
+                enemy = random.choice(self.enemies)
+                # Crear proyectil dirigido al jugador
+                start_x = enemy.x + enemy.width // 2
+                start_y = enemy.y + enemy.height
+                projectile = Projectile(
+                    start_x,
+                    start_y,
+                    8,  # Velocidad
+                    RED,
+                    False,  # Es disparo enemigo
+                    None,  # Sin objetivo enemigo
+                    self.player  # Objetivo: jugador
+                )
+                self.enemy_projectiles.append(projectile)
+                self.sound_manager.play_sound('shoot', 0.15, self.sound_volume)
+            
+            # NO reducir vida aquí - solo cuando el proyectil golpee al jugador
+        
+        # Registrar resultado en archivo JSON
+        self._log_answer_result(operation, response_time, total_time, key_pressed)
+        
+        # Registrar respuesta en el sistema de tiempo adaptativo (modo infinito)
+        if self.modo_infinito and self.tiempo_adaptativo:
+            fue_correcta = self.math_problem.check_answer(operation)
+            self.tiempo_adaptativo.registrar_respuesta(response_time, fue_correcta)
+
+
+    def _log_answer_result(self, operation, response_time, total_time, key_pressed):
+        """Registra datos de cada respuesta en resultados.json"""
+        try:
+            # Manejar caso de timeout (operation puede ser None)
+            signo_operacional = self.math_problem.operation if operation is not None else "TIMEOUT"
+            
+            entry = {
+                "nivel_actual": self.level,
+                "vidas_actuales": self.player.lives,
+                "puntaje_actual": self.player.score,
+                "respuestas_correctas_acumuladas": self.player.correct_answers,
+                "tiempo_respuesta_pregunta": response_time,
+                "tiempo_total_pregunta": total_time,
+                "tecla_presionada": key_pressed,
+                "numero_1": self.math_problem.num1,
+                "numero_2": self.math_problem.num2,
+                "signo_operacional": signo_operacional,
+                "resultado_operacional": self.math_problem.answer,
+            }
+
+            # Cargar datos existentes si el archivo ya existe
+            resultados = []
+            if os.path.exists("resultados.json"):
+                with open("resultados.json", "r", encoding="utf-8") as f:
+                    try:
+                        resultados = json.load(f)
+                    except json.JSONDecodeError:
+                        resultados = []
+
+            resultados.append(entry)
+
+            # Guardar lista actualizada
+            with open("resultados.json", "w", encoding="utf-8") as f:
+                json.dump(resultados, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error al guardar resultados en resultados.json: {e}")
+    
+    def handle_timeout(self):
+        """Maneja cuando se acaba el tiempo para responder"""
+        # Capturar tiempo total ANTES de reiniciar
+        total_time = self.question_timer_max / FPS  # Tiempo total en segundos
+        response_time = total_time  # Usó todo el tiempo disponible
+        
+        # Establecer cooldown
+        self.answer_cooldown = 90
+        
+        # Reiniciar temporizador
+        self.question_timer = self.question_timer_max
+        
+        # El enemigo ataca por tiempo agotado
+        self.player.incorrect_answers += 1
+        # Restar 5 puntos, sin bajar de 0
+        self.player.score = max(0, self.player.score - 5)
+        self.feedback_text = "¡TIEMPO AGOTADO!"
+        self.feedback_timer = 60
+        self.feedback_color = RED
+        self.sound_manager.play_sound('wrong', 0.3, self.sound_volume)
+        
+        # Resetear racha de la mascota
+        self.mascota.reset_streak()
+        
+        # Los enemigos disparan - disparos dirigidos al jugador
+        if self.enemies:
+            # Solo un enemigo dispara
+            enemy = random.choice(self.enemies)
+            # Crear proyectil dirigido al jugador
+            start_x = enemy.x + enemy.width // 2
+            start_y = enemy.y + enemy.height
+            projectile = Projectile(
+                start_x,
+                start_y,
+                8,  # Velocidad
+                RED,
+                False,  # Es disparo enemigo
+                None,  # Sin objetivo enemigo
+                self.player  # Objetivo: jugador
+            )
+            self.enemy_projectiles.append(projectile)
+            self.sound_manager.play_sound('shoot', 0.15, self.sound_volume)
+        
+        # Registrar resultado en archivo JSON (timeout = sin tecla presionada)
+        self._log_answer_result(None, response_time, total_time, "TIMEOUT")
+        
+        # NO reducir vida aquí - solo cuando el proyectil golpee al jugador
+    
+    def update_menu_simulation(self):
+        """Simula el juego en el fondo del menú con animación dinámica"""
+        # Mover jugador suavemente (piloto automático con movimiento más dinámico)
+        time_ms = pygame.time.get_ticks()
+        self.player.x += math.sin(time_ms * 0.001) * 2
+        self.player.y = SCREEN_HEIGHT - 100 + math.sin(time_ms * 0.002) * 10
+        # Mantener jugador en pantalla
+        self.player.x = max(0, min(SCREEN_WIDTH - self.player.width, self.player.x))
+        
+        # Actualizar enemigos (movimiento normal)
+        for enemy in self.enemies:
+            enemy.update()
+            
+            # Si tocan los bordes, cambiar dirección
+            if enemy.x <= 0 or enemy.x >= SCREEN_WIDTH - enemy.width:
+                enemy.speed *= -1
+        
+        # === SISTEMA DE BATALLA SIMULADA - MÁS INTENSO ===
+        self.menu_shoot_timer += 1
+        
+        # Actualizar screen shake
+        if self.menu_screen_shake > 0:
+            self.menu_screen_shake -= 1
+            self.menu_shake_intensity *= 0.9
+        
+        # Jugador dispara automáticamente cada 25 frames (MÁS RÁPIDO)
+        if self.menu_shoot_timer % 25 == 0 and self.enemies:
+            target_enemy = random.choice(self.enemies)
+            projectile = Projectile(
+                self.player.x + self.player.width // 2,
+                self.player.y,
+                -12,  # Más rápido
+                GREEN,
+                True,
+                target_enemy
+            )
+            self.menu_projectiles.append(projectile)
+        
+        # Enemigos disparan aleatoriamente cada 40 frames (MÁS FRECUENTE)
+        if self.menu_shoot_timer % 40 == 0 and self.enemies:
+            shooter = random.choice(self.enemies)
+            projectile = Projectile(
+                shooter.x + shooter.width // 2,
+                shooter.y + shooter.height,
+                10,  # Más rápido
+                RED,
+                False,
+                None,
+                self.player
+            )
+            self.menu_projectiles.append(projectile)
+        
+        # Actualizar proyectiles del menú
+        for projectile in self.menu_projectiles[:]:
+            projectile.update()
+            
+            # Verificar colisiones con enemigos (proyectiles del jugador)
+            if projectile.is_player_shot:
+                for enemy in self.enemies[:]:
+                    if projectile.get_rect().colliderect(
+                        pygame.Rect(enemy.x, enemy.y, enemy.width, enemy.height)
+                    ):
+                        # Crear explosión GRANDE
+                        self.menu_explosions.append(Explosion(
+                            enemy.x + enemy.width // 2,
+                            enemy.y + enemy.height // 2
+                        ))
+                        # SCREEN SHAKE en explosión
+                        self.menu_screen_shake = 15
+                        self.menu_shake_intensity = 8
+                        # Remover proyectil
+                        if projectile in self.menu_projectiles:
+                            self.menu_projectiles.remove(projectile)
+                        # Dañar enemigo
+                        enemy.take_damage()
+                        if enemy.is_dead():
+                            self.enemies.remove(enemy)
+                            # Explosión extra al morir
+                            self.menu_screen_shake = 25
+                            self.menu_shake_intensity = 15
+                        break
+            
+            # Verificar colisión con jugador (proyectiles enemigos) - solo visual, sin daño
+            elif not projectile.is_player_shot:
+                if projectile.get_rect().colliderect(
+                    pygame.Rect(self.player.x, self.player.y, self.player.width, self.player.height)
+                ):
+                    # Explosión visual pequeña
+                    self.menu_explosions.append(Explosion(
+                        self.player.x + self.player.width // 2,
+                        self.player.y + self.player.height // 2
+                    ))
+                    if projectile in self.menu_projectiles:
+                        self.menu_projectiles.remove(projectile)
+            
+            # Eliminar proyectiles fuera de pantalla
+            if projectile.is_off_screen() and projectile in self.menu_projectiles:
+                self.menu_projectiles.remove(projectile)
+        
+        # Actualizar explosiones del menú
+        for explosion in self.menu_explosions[:]:
+            explosion.update()
+            if explosion.is_dead():
+                self.menu_explosions.remove(explosion)
+        
+        # Regenerar enemigos si hay muy pocos (para mantener la acción)
+        if len(self.enemies) < 2:
+            # Agregar nuevos enemigos
+            for i in range(3):
+                enemy = Enemy(
+                    random.randint(100, SCREEN_WIDTH - 100),
+                    random.randint(50, 150),
+                    2,  # HP bajo para que mueran rápido
+                    random.uniform(1, 2),
+                    random.randint(1, 3)  # Nivel aleatorio para variedad visual
+                )
+                enemy.direction = random.choice([-1, 1])
+                self.enemies.append(enemy)
+        
+        # === ACTUALIZAR PARTÍCULAS DEL MENÚ ===
+        for particle in self.menu_particles:
+            particle.update()
+        
+        # === ACTUALIZAR SÍMBOLOS MATEMÁTICOS ===
+        for symbol in self.floating_math_symbols:
+            symbol.update()
+        
+        # Actualizar objetos espaciales (estrellas, planetas)
+        for obj in self.space_objects:
+            obj.update()
+            
+        # Generar nuevos objetos espaciales ocasionalmente
+        if random.random() < 0.02:
+            self.generate_space_objects()
+
+    def update(self):
+        """Actualiza el estado del juego"""
+        # Actualizar menú
+        if self.game_state == "menu":
+            self.menu_blink = (self.menu_blink + 1) % 60
+            self.update_menu_simulation()
+            return
+        
+        # Actualizar controles/settings
+        if self.game_state == "controls":
+            return
+        elif self.game_state == "settings":
+            # Sincronizar sliders antes de actualizar
+            self._sync_sliders()
+            # Los sliders se actualizan en handle_input
+            mouse_pos = pygame.mouse.get_pos()
+            mouse_down = pygame.mouse.get_pressed()[0]
+            self.music_slider.update(mouse_pos, mouse_down, False)
+            self.sound_slider.update(mouse_pos, mouse_down, False)
+            self.music_volume = self.music_slider.value
+            self.sound_volume = self.sound_slider.value
+            pygame.mixer.music.set_volume(self.music_volume)
+            return
+        elif self.game_state == "paused":
+            return
+        
+        # Actualizar introducción de nivel
+        if self.game_state == "level_intro":
+            self.level_intro_timer -= 1
+            if self.level_intro_timer <= 0:
+                self.game_state = "playing"
+                # La música continúa desde el nivel anterior, no se reinicia
+            return
+        
+        if self.game_state != "playing":
+            return
+        
+        # Actualizar jugador
+        self.player.update()
+        
+        # Movimiento del jugador con flechas
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            self.player.move_left()
+        if keys[pygame.K_RIGHT]:
+            self.player.move_right()
+        self.player.apply_movement()
+        
+        # Actualizar mascota animada
+        self.mascota.update()
+        
+        # Actualizar enemigos
+        for enemy in self.enemies[:]:
+            enemy.update()
+        
+        # Actualizar objetos espaciales
+        for obj in self.space_objects:
+            obj.update()
+        
+        # Actualizar explosiones
+        for explosion in self.explosions[:]:
+            explosion.update()
+            if explosion.is_dead():
+                self.explosions.remove(explosion)
+        
+        # Actualizar proyectiles del jugador
+        for projectile in self.player_projectiles[:]:
+            # Si el proyectil tenía un objetivo que ya murió, redirigirlo a otro enemigo
+            if projectile.is_player_shot and projectile.target_enemy:
+                if projectile.target_enemy.is_dead() or projectile.target_enemy not in self.enemies:
+                    # Buscar otro enemigo vivo como objetivo
+                    if self.enemies:
+                        projectile.target_enemy = random.choice(self.enemies)
+                    else:
+                        # No hay enemigos, eliminar proyectil
+                        self.player_projectiles.remove(projectile)
+                        continue
+            
+            projectile.update()
+            
+            # Colisión con enemigos
+            hit_enemy = None
+            for enemy in self.enemies:
+                if projectile.get_rect().colliderect(
+                    pygame.Rect(enemy.x, enemy.y, enemy.width, enemy.height)
+                ):
+                    enemy.take_damage()
+                    hit_enemy = enemy
+                    if projectile in self.player_projectiles:
+                        self.player_projectiles.remove(projectile)
+                    self.sound_manager.play_sound('hit', 0.8, self.sound_volume)  # Volumen alto para sonido explosivo
+                    break
+            
+            # Verificar si algún enemigo fue derrotado
+            if hit_enemy and hit_enemy.is_dead():
+                # Crear explosión
+                explosion = Explosion(
+                    hit_enemy.x + hit_enemy.width // 2,
+                    hit_enemy.y + hit_enemy.height // 2
+                )
+                self.explosions.append(explosion)
+                self.sound_manager.play_sound('explosion', 0.4, self.sound_volume)
+                
+                # Remover enemigo
+                if hit_enemy in self.enemies:
+                    self.enemies.remove(hit_enemy)
+                
+                # Si todos los enemigos fueron derrotados
+                if len(self.enemies) == 0:
+                    # Limpiar proyectiles restantes
+                    self.player_projectiles.clear()
+                    
+                    if self.modo_infinito:
+                        # Modo infinito: regenerar enemigos sin cambiar de nivel
+                        # Incrementar oleada y ciclar nivel para variar dificultad (1-3)
+                        self.oleada_infinita += 1
+                        self.level = (self.level % 3) + 1
+                        self.generate_enemies()
+                        self.generate_problem()
+                        self.generate_space_objects()
+                    else:
+                        # Modo normal: avanzar de nivel o ganar
+                        if self.level < 3:
+                            self.level += 1
+                            self.game_state = "level_intro"
+                            self.level_intro_timer = 180
+                            self.generate_enemies()
+                            self.generate_problem()
+                            self.generate_space_objects()
+                            # La música continúa, no se reinicia al pasar de nivel
+                        else:
+                            self.game_state = "win"
+                            # Detener música cuando se gana el juego
+                            self.sound_manager.stop_background_music()
+            
+            # Eliminar proyectiles fuera de pantalla solo si no tienen objetivo válido
+            if projectile in self.player_projectiles:
+                if projectile.is_off_screen():
+                    # Si está fuera de pantalla pero tiene objetivo, mantenerlo (puede volver)
+                    if not (projectile.is_player_shot and projectile.target_enemy and 
+                           projectile.target_enemy in self.enemies):
+                        self.player_projectiles.remove(projectile)
+        
+        # Actualizar proyectiles del enemigo
+        for projectile in self.enemy_projectiles[:]:
+            # Si el proyectil tiene objetivo (jugador), actualizar dirección
+            if not projectile.is_player_shot and projectile.target_player:
+                # El proyectil ya se actualiza automáticamente hacia el jugador en update()
+                pass
+            
+            projectile.update()
+            
+            # Colisión con el jugador
+            if projectile.get_rect().colliderect(
+                pygame.Rect(self.player.x, self.player.y, self.player.width, self.player.height)
+            ):
+                self.player.take_damage()
+                if projectile in self.enemy_projectiles:
+                    self.enemy_projectiles.remove(projectile)
+                self.sound_manager.play_sound('hit', 0.8, self.sound_volume)  # Volumen alto para sonido explosivo
+                # Reproducir sonido de daño cuando recibe impacto
+                self.sound_manager.play_sound('damage', 0.5, self.sound_volume)
+                if self.player.lives <= 0:
+                    self.game_state = "lose"
+                    # Detener música cuando se pierde el juego
+                    self.sound_manager.stop_background_music()
+            
+            # Eliminar proyectiles fuera de pantalla solo si no tienen objetivo
+            elif projectile.is_off_screen():
+                if not (not projectile.is_player_shot and projectile.target_player):
+                    if projectile in self.enemy_projectiles:
+                        self.enemy_projectiles.remove(projectile)
+        
+        # Actualizar feedback
+        if self.feedback_timer > 0:
+            self.feedback_timer -= 1
+        
+        # Actualizar temporizador de la pregunta
+        if (self.game_state == "playing" and 
+            self.answer_cooldown == 0 and 
+            self.question_timer > 0):
+            self.question_timer -= 1
+            
+            if self.question_timer == 0:
+                self.handle_timeout()
+        
+        # Actualizar cooldown de respuesta
+        if self.answer_cooldown > 0:
+            self.answer_cooldown -= 1
+            if self.answer_cooldown == 0:
+                self.generate_problem()
+    
+    def draw_ui(self):
+        """Dibuja la interfaz de usuario mejorada"""
+        
+        # Temporizador de la pregunta (en esquina superior izquierda)
+        time_remaining = self.question_timer / FPS  # Tiempo en segundos
+        time_percentage = self.question_timer / self.question_timer_max
+        
+        # Barra de tiempo (en esquina superior izquierda)
+        timer_bar_width = 200
+        timer_bar_height = 25
+        timer_bar_x = 20
+        timer_bar_y = 10
+        
+        # Fondo semitransparente para el temporizador
+        timer_bg = pygame.Surface((timer_bar_width + 10, timer_bar_height + 30), pygame.SRCALPHA)
+        timer_bg.fill((0, 0, 0, 180))
+        self.screen.blit(timer_bg, (timer_bar_x - 5, timer_bar_y - 5))
+        
+        # Etiqueta "TIEMPO"
+        time_label = self.font_tiny.render("TIEMPO", True, CYAN)
+        self.screen.blit(time_label, (timer_bar_x, timer_bar_y - 3))
+        
+        # Fondo de la barra de tiempo
+        pygame.draw.rect(self.screen, (50, 50, 50), 
+                        (timer_bar_x, timer_bar_y + 15, timer_bar_width, timer_bar_height))
+        
+        # Barra de progreso del tiempo (disminuye)
+        if time_percentage > 0:
+            progress_width = int(timer_bar_width * time_percentage)
+            
+            # Color dinámico con gradientes y pulsación
+            if time_percentage > 0.5:
+                # Verde estable
+                timer_color = GREEN
+                glow_alpha = 0
+            elif time_percentage > 0.25:
+                # Amarillo con pulso suave
+                pulse = abs(math.sin(pygame.time.get_ticks() * 0.005)) * 0.3 + 0.7
+                timer_color = (int(255 * pulse), int(220 * pulse), 0)
+                glow_alpha = 30
+            else:
+                # Rojo con pulso intenso y urgente
+                pulse = abs(math.sin(pygame.time.get_ticks() * 0.015)) * 0.5 + 0.5
+                timer_color = (int(255 * pulse), int(50 * pulse), int(50 * pulse))
+                glow_alpha = int(80 * pulse)
+                
+                # Efecto de glow pulsante cuando queda poco tiempo
+                glow_surface = pygame.Surface((timer_bar_width + 20, timer_bar_height + 20), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surface, (255, 0, 0, glow_alpha), 
+                               (0, 0, timer_bar_width + 20, timer_bar_height + 20), border_radius=5)
+                self.screen.blit(glow_surface, (timer_bar_x - 10, timer_bar_y + 5))
+            
+            # Barra principal
+            pygame.draw.rect(self.screen, timer_color, 
+                           (timer_bar_x, timer_bar_y + 15, progress_width, timer_bar_height))
+            
+            # Efecto de brillo en la barra
+            if progress_width > 5:
+                pygame.draw.rect(self.screen, (255, 255, 255), 
+                               (timer_bar_x, timer_bar_y + 15, progress_width, 10), 1)
+        
+        # Borde de la barra
+        pygame.draw.rect(self.screen, WHITE, 
+                        (timer_bar_x, timer_bar_y + 15, timer_bar_width, timer_bar_height), 2)
+        
+        # Texto del tiempo restante
+        if self.answer_cooldown == 0:  # Solo mostrar si no hay cooldown activo
+            time_text = self.font_small.render(f"{time_remaining:.1f}s", True, WHITE)
+            time_text_shadow = self.font_small.render(f"{time_remaining:.1f}s", True, BLACK)
+            time_text_rect = time_text.get_rect(center=(timer_bar_x + timer_bar_width // 2, timer_bar_y + 27))
+            self.screen.blit(time_text_shadow, (time_text_rect.x + 1, time_text_rect.y + 1))
+            self.screen.blit(time_text, time_text_rect)
+        
+        # Indicador de MODO INFINITO (si está activo)
+        if self.modo_infinito:
+            infinite_y = timer_bar_y + timer_bar_height + 25
+            
+            # Fondo para el indicador
+            mode_bg = pygame.Surface((timer_bar_width + 10, 24), pygame.SRCALPHA)
+            mode_bg.fill((100, 0, 150, 180))  # Púrpura semitransparente
+            self.screen.blit(mode_bg, (timer_bar_x - 5, infinite_y))
+            
+            # Texto del modo
+            mode_text = self.font_tiny.render("⚡ MODO INFINITO", True, PINK)
+            self.screen.blit(mode_text, (timer_bar_x, infinite_y + 4))
+            
+            # Mostrar tiempo adaptativo si el sistema está activo
+            if self.tiempo_adaptativo and self.tiempo_adaptativo.usar_modelo:
+                ml_text = self.font_tiny.render("ML", True, GREEN)
+            else:
+                ml_text = self.font_tiny.render("--", True, YELLOW)
+            ml_rect = ml_text.get_rect(right=timer_bar_x + timer_bar_width, centery=infinite_y + 12)
+            self.screen.blit(ml_text, ml_rect)
+
+        
+        # Panel del problema matemático (ubicado más abajo para no tapar al enemigo)
+        problem_y_offset = 350  # Posición más abajo en la pantalla
+        problem_bg = pygame.Surface((SCREEN_WIDTH - 40, 100), pygame.SRCALPHA)
+        problem_bg.fill((0, 0, 0, 200))
+        self.screen.blit(problem_bg, (20, problem_y_offset))
+        
+        # Obtener texto del problema y separar el signo "?"
+        problem_str = self.math_problem.get_text()
+        
+        # Encontrar la posición del "?" para destacarlo
+        if "?" in problem_str:
+            parts = problem_str.split("?")
+            pre_question = parts[0]
+            
+            # Renderizar parte antes del "?"
+            pre_text = self.font_large.render(pre_question, True, YELLOW)
+            pre_shadow = self.font_large.render(pre_question, True, BLACK)
+            
+            # Calcular posición centrada
+            total_width = pre_text.get_width()
+            
+            # Signo "?" animado con glow
+            pulse = abs(math.sin(pygame.time.get_ticks() * 0.008)) * 0.5 + 0.5
+            question_scale = 1.0 + pulse * 0.2  # Escala pulsante
+            
+            # Colores dinámicos para el "?"
+            q_r = int(255 * pulse + 100 * (1 - pulse))
+            q_g = int(100 * pulse + 255 * (1 - pulse))
+            q_b = int(255)
+            question_color = (q_r, q_g, q_b)
+            
+            question_text = self.font_large.render("?", True, question_color)
+            question_shadow = self.font_large.render("?", True, (0, 0, 0))
+            
+            # Escalar el "?"
+            q_width = int(question_text.get_width() * question_scale)
+            q_height = int(question_text.get_height() * question_scale)
+            if q_width > 0 and q_height > 0:
+                question_text = pygame.transform.scale(question_text, (q_width, q_height))
+                question_shadow = pygame.transform.scale(question_shadow, (q_width, q_height))
+            
+            total_width += q_width
+            
+            # Renderizar parte después del "?" (si existe)
+            post_text = None
+            if len(parts) > 1:
+                post_question = parts[1]
+                post_text = self.font_large.render(post_question, True, YELLOW)
+                post_shadow = self.font_large.render(post_question, True, BLACK)
+                total_width += post_text.get_width()
+            
+            # Dibujar glow detrás del "?"
+            glow_size = int(30 + 10 * pulse)
+            glow_surface = pygame.Surface((glow_size * 2, glow_size * 2), pygame.SRCALPHA)
+            glow_alpha = int(100 * pulse)
+            pygame.draw.circle(glow_surface, (*question_color, glow_alpha), 
+                             (glow_size, glow_size), glow_size)
+            
+            # Posicionar todo centrado
+            start_x = SCREEN_WIDTH // 2 - total_width // 2
+            y_pos = problem_y_offset + 25
+            
+            # Dibujar sombra y texto previo
+            self.screen.blit(pre_shadow, (start_x + 2, y_pos + 2))
+            self.screen.blit(pre_text, (start_x, y_pos))
+            
+            # Posición del "?"
+            q_x = start_x + pre_text.get_width()
+            q_y = y_pos - (q_height - pre_text.get_height()) // 2
+            
+            # Dibujar glow, sombra y "?" animado
+            self.screen.blit(glow_surface, (q_x + q_width // 2 - glow_size, q_y + q_height // 2 - glow_size))
+            self.screen.blit(question_shadow, (q_x + 3, q_y + 3))
+            self.screen.blit(question_text, (q_x, q_y))
+            
+            # Dibujar texto posterior
+            if post_text:
+                post_x = q_x + q_width
+                self.screen.blit(post_shadow, (post_x + 2, y_pos + 2))
+                self.screen.blit(post_text, (post_x, y_pos))
+        else:
+            # Fallback si no hay "?"
+            problem_text = self.font_large.render(problem_str, True, YELLOW)
+            problem_shadow = self.font_large.render(problem_str, True, BLACK)
+            problem_rect = problem_text.get_rect(center=(SCREEN_WIDTH // 2, problem_y_offset + 30))
+            self.screen.blit(problem_shadow, (problem_rect.x + 2, problem_rect.y + 2))
+            self.screen.blit(problem_text, problem_rect)
+        
+        # Instrucciones mejoradas
+        # Instrucciones mejoradas
+        if self.answer_cooldown > 0:
+            # Mostrar mensaje de espera cuando hay cooldown
+            wait_time = (self.answer_cooldown / FPS)  # Tiempo restante en segundos
+            instructions = f"Espera {wait_time:.1f}s para responder..."
+            inst_text = self.font_small.render(instructions, True, ORANGE)
+            inst_rect = inst_text.get_rect(center=(SCREEN_WIDTH // 2, problem_y_offset + 65))
+            self.screen.blit(inst_text, inst_rect)
+        else:
+            # Dibujar teclas visuales (W, A, S, D)
+            controls = [('W', '+'), ('A', '-'), ('S', '*'), ('D', '/')]
+            start_x = SCREEN_WIDTH // 2 - 140
+            y_pos = problem_y_offset + 65
+            spacing = 80
+            
+            for i, (key, op) in enumerate(controls):
+                x_pos = start_x + i * spacing
+                
+                # Fondo de la tecla
+                key_rect = pygame.Rect(x_pos, y_pos - 10, 24, 24)
+                pygame.draw.rect(self.screen, (60, 60, 70), key_rect, border_radius=5)
+                pygame.draw.rect(self.screen, (150, 150, 160), key_rect, 2, border_radius=5)
+                
+                # Letra de la tecla
+                key_surf = self.font_tiny.render(key, True, WHITE)
+                key_rect_center = key_surf.get_rect(center=key_rect.center)
+                self.screen.blit(key_surf, key_rect_center)
+                
+                # Símbolo de operación
+                op_surf = self.font_small.render(op, True, CYAN)
+                self.screen.blit(op_surf, (x_pos + 30, y_pos - 8))
+        
+        # Barra de progreso del cooldown (si está activo)
+        if self.answer_cooldown > 0:
+            cooldown_max = 90  # Debe coincidir con el valor en process_answer
+            cooldown_percentage = 1.0 - (self.answer_cooldown / cooldown_max)
+            bar_width = 200
+            bar_height = 4
+            bar_x = SCREEN_WIDTH // 2 - bar_width // 2
+            bar_y = problem_y_offset + 85
+            
+            # Fondo de la barra
+            pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+            # Barra de progreso
+            progress_width = int(bar_width * cooldown_percentage)
+            if progress_width > 0:
+                color = (
+                    int(255 * (1 - cooldown_percentage)),
+                    int(255 * cooldown_percentage),
+                    0
+                )
+                pygame.draw.rect(self.screen, color, (bar_x, bar_y, progress_width, bar_height))
+            # Borde
+            pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+        
+        # Panel de estadísticas mejorado
+        stats_y = SCREEN_HEIGHT - 150
+        stats_bg = pygame.Surface((200, 140), pygame.SRCALPHA)
+        stats_bg.fill((0, 0, 0, 200))
+        self.screen.blit(stats_bg, (5, stats_y - 5))
+        
+        if self.modo_infinito:
+            stats = [
+                ("Oleada", str(self.oleada_infinita), PURPLE),
+                ("Vidas", f"{self.player.lives}/5", GREEN),
+                ("Enemigos", f"{len(self.enemies)}", RED),
+                ("Puntaje", str(self.player.score), CYAN),
+                ("Correctas", str(self.player.correct_answers), GREEN),
+                ("Incorrectas", str(self.player.incorrect_answers), RED)
+            ]
+        else:
+            stats = [
+                ("Nivel", f"{self.level}/3", YELLOW),
+                ("Vidas", f"{self.player.lives}/5", GREEN),
+                ("Enemigos", f"{len(self.enemies)}", RED),
+                ("Puntaje", str(self.player.score), CYAN),
+                ("Correctas", str(self.player.correct_answers), GREEN),
+                ("Incorrectas", str(self.player.incorrect_answers), RED)
+            ]
+        
+        for i, (label, value, color) in enumerate(stats):
+            label_text = self.font_tiny.render(f"{label}:", True, WHITE)
+            value_text = self.font_small.render(value, True, color)
+            self.screen.blit(label_text, (15, stats_y + i * 22))
+            self.screen.blit(value_text, (120, stats_y + i * 22))
+        
+        # Vidas del jugador (corazones mejorados)
+        heart_size = 24
+        hearts_bg = pygame.Surface((140, 40), pygame.SRCALPHA)
+        hearts_bg.fill((0, 0, 0, 180))
+        self.screen.blit(hearts_bg, (SCREEN_WIDTH - 145, 5))
+        
+        for i in range(5):
+            x = SCREEN_WIDTH - 135 + i * 26
+            y = 25
+            if i < self.player.lives:
+                # Corazón lleno con gradiente
+                # Sombra
+                pygame.draw.circle(self.screen, DARK_RED, (x, y), heart_size // 2 + 1)
+                pygame.draw.polygon(self.screen, DARK_RED, [
+                    (x, y + heart_size // 4 + 1),
+                    (x - heart_size // 2 - 1, y + 1),
+                    (x, y - heart_size // 4 + 1),
+                    (x + heart_size // 2 + 1, y + 1)
+                ])
+                # Corazón principal
+                pygame.draw.circle(self.screen, RED, (x, y), heart_size // 2)
+                pygame.draw.polygon(self.screen, RED, [
+                    (x, y + heart_size // 4),
+                    (x - heart_size // 2, y),
+                    (x, y - heart_size // 4),
+                    (x + heart_size // 2, y)
+                ])
+                # Brillo
+                pygame.draw.circle(self.screen, PINK, (x - 2, y - 2), 4)
+            else:
+                # Corazón vacío (solo borde)
+                pygame.draw.circle(self.screen, (100, 100, 100), (x, y), heart_size // 2, 2)
+                pygame.draw.polygon(self.screen, (100, 100, 100), [
+                    (x, y + heart_size // 4),
+                    (x - heart_size // 2, y),
+                    (x, y - heart_size // 4),
+                    (x + heart_size // 2, y)
+                ], 2)
+        
+        # Feedback de respuesta mejorado
+        if self.feedback_timer > 0:
+            # Efecto de pulso
+            scale = 1.0 + (abs(15 - self.feedback_timer) / 15.0) * 0.3
+            
+            # Sombra del texto
+            feedback_shadow = self.font_medium.render(
+                self.feedback_text, True, BLACK
+            )
+            shadow_rect = feedback_shadow.get_rect(
+                center=(SCREEN_WIDTH // 2 + 3, SCREEN_HEIGHT // 2 + 3)
+            )
+            self.screen.blit(feedback_shadow, shadow_rect)
+            
+            # Texto principal
+            feedback_surface = self.font_medium.render(
+                self.feedback_text, True, self.feedback_color
+            )
+            feedback_rect = feedback_surface.get_rect(
+                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+            )
+            self.screen.blit(feedback_surface, feedback_rect)
+            
+            # Efecto de glow
+            if self.feedback_color == GREEN:
+                glow_color = (0, 255, 0, 30)
+            else:
+                glow_color = (255, 0, 0, 30)
+            
+            glow_size = int(200 * scale)
+            glow_surface = pygame.Surface((glow_size, glow_size), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surface, glow_color, (glow_size // 2, glow_size // 2), glow_size // 2)
+            self.screen.blit(glow_surface, (SCREEN_WIDTH // 2 - glow_size // 2, SCREEN_HEIGHT // 2 - glow_size // 2))
+    
+    def draw_game_over(self):
+        """Dibuja la pantalla de fin de juego mejorada"""
+        # Overlay semitransparente
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        overlay.set_alpha(220)
+        overlay.fill(BLACK)
+        self.screen.blit(overlay, (0, 0))
+        
+        # Panel central
+        panel_width = 500
+        panel_height = 300
+        panel_x = (SCREEN_WIDTH - panel_width) // 2
+        panel_y = (SCREEN_HEIGHT - panel_height) // 2
+        
+        panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        panel.fill((20, 20, 40, 240))
+        pygame.draw.rect(panel, WHITE, (0, 0, panel_width, panel_height), 3)
+        self.screen.blit(panel, (panel_x, panel_y))
+        
+        if self.game_state == "win":
+            # Efecto de victoria
+            text = self.font_large.render("¡GANASTE!", True, GREEN)
+            text_shadow = self.font_large.render("¡GANASTE!", True, BLACK)
+            subtitle = self.font_medium.render("¡Felicitaciones!", True, YELLOW)
+            score_text = self.font_medium.render(
+                f"Puntaje Final: {self.player.score}", True, GOLD
+            )
+        else:
+            # Efecto de derrota
+            text = self.font_large.render("PERDISTE", True, RED)
+            text_shadow = self.font_large.render("PERDISTE", True, BLACK)
+            subtitle = self.font_medium.render("Mejor suerte la próxima", True, ORANGE)
+            score_text = self.font_medium.render(
+                f"Puntaje Final: {self.player.score}", True, YELLOW
+            )
+        
+        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80))
+        self.screen.blit(text_shadow, (text_rect.x + 3, text_rect.y + 3))
+        self.screen.blit(text, text_rect)
+        
+        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30))
+        self.screen.blit(subtitle, subtitle_rect)
+        
+        score_rect = score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20))
+        self.screen.blit(score_text, score_rect)
+        
+        # Estadísticas finales
+        stats_final = [
+            f"Respuestas Correctas: {self.player.correct_answers}",
+            f"Respuestas Incorrectas: {self.player.incorrect_answers}"
+        ]
+        for i, stat in enumerate(stats_final):
+            stat_text = self.font_small.render(stat, True, CYAN)
+            stat_rect = stat_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 60 + i * 25))
+            self.screen.blit(stat_text, stat_rect)
+        
+        restart_text = self.font_medium.render(
+            "Presiona R para reiniciar", True, WHITE
+        )
+        restart_shadow = self.font_medium.render(
+            "Presiona R para reiniciar", True, BLACK
+        )
+        restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 130))
+        self.screen.blit(restart_shadow, (restart_rect.x + 2, restart_rect.y + 2))
+        self.screen.blit(restart_text, restart_rect)
+    
+    def draw_background(self):
+        """Dibuja el fondo según el nivel actual"""
+        # Obtener dimensiones reales de la pantalla
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+        
+        if self.game_state == "menu":
+            level_for_bg = 1
+        elif self.game_state == "level_intro":
+            level_for_bg = self.level
+        elif self.game_state != "playing":
+            level_for_bg = self.level
+        else:
+            level_for_bg = self.level
+        
+        # Fondo con gradiente espacial según el nivel
+        for y in range(screen_height):
+            progress = y / screen_height
+            
+            if level_for_bg == 1:
+                r = int(L1_BG_START[0] + (L1_BG_END[0] - L1_BG_START[0]) * progress)
+                g = int(L1_BG_START[1] + (L1_BG_END[1] - L1_BG_START[1]) * progress)
+                b = int(L1_BG_START[2] + (L1_BG_END[2] - L1_BG_START[2]) * progress)
+                star_color_mult = L1_STAR
+            elif level_for_bg == 2:
+                r = int(L2_BG_START[0] + (L2_BG_END[0] - L2_BG_START[0]) * progress)
+                g = int(L2_BG_START[1] + (L2_BG_END[1] - L2_BG_START[1]) * progress)
+                b = int(L2_BG_START[2] + (L2_BG_END[2] - L2_BG_START[2]) * progress)
+                star_color_mult = L2_STAR
+            else:
+                r = int(L3_BG_START[0] + (L3_BG_END[0] - L3_BG_START[0]) * progress)
+                g = int(L3_BG_START[1] + (L3_BG_END[1] - L3_BG_START[1]) * progress)
+                b = int(L3_BG_START[2] + (L3_BG_END[2] - L3_BG_START[2]) * progress)
+                star_color_mult = L3_STAR
+            
+            color = (r, g, b)
+            pygame.draw.line(self.screen, color, (0, y), (screen_width, y))
+        
+        # Dibujar fondo estrellado
+        for x, y, size, brightness in self.stars:
+            base_color = star_color_mult
+            color = (
+                min(255, int(base_color[0] * brightness / 255)),
+                min(255, int(base_color[1] * brightness / 255)),
+                min(255, int(base_color[2] * brightness / 255))
+            )
+            pygame.draw.circle(self.screen, color, (x, y), size)
+            if size >= 2:
+                pygame.draw.circle(self.screen, WHITE, (x, y), 1)
+        
+        # Dibujar objetos espaciales (solo en playing)
+        if self.game_state == "playing":
+            for obj in self.space_objects:
+                obj.draw(self.screen)
+    
+    def draw_menu(self):
+        """Dibuja la pantalla de menú principal con diseño moderno y animación dinámica"""
+        # Crear buffer para screen shake
+        menu_buffer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        menu_buffer.blit(self.screen, (0, 0))  # Copiar fondo actual
+        
+        # === CAPA 1: POLVO CÓSMICO (más lejano, parallax lento) ===
+        for particle in self.menu_particles:
+            if particle.type == 'dust':
+                particle.draw(menu_buffer)
+        
+        # === CAPA 2: OBJETOS ESPACIALES (asteroides, planetas) ===
+        for obj in self.space_objects:
+            obj.draw(menu_buffer)
+        
+        # === CAPA 3: SÍMBOLOS MATEMÁTICOS FLOTANTES ===
+        for symbol in self.floating_math_symbols:
+            symbol.draw(menu_buffer, self.font_medium)
+        
+        # === CAPA 4: PROYECTILES DE LA BATALLA ===
+        for projectile in self.menu_projectiles:
+            projectile.draw(menu_buffer)
+        
+        # === CAPA 5: NAVES (Jugador y Enemigos) ===
+        self.player.draw(menu_buffer)
+        for enemy in self.enemies:
+            enemy.draw(menu_buffer)
+        
+        # === CAPA 6: EXPLOSIONES (MUY PROMINENTES) ===
+        for explosion in self.menu_explosions:
+            explosion.draw(menu_buffer)
+        
+        # === CAPA 7: ESTRELLAS FUGACES Y CHISPAS (más cercanas, brillantes) ===
+        for particle in self.menu_particles:
+            if particle.type in ['star', 'spark']:
+                particle.draw(menu_buffer)
+        
+        # === APLICAR SCREEN SHAKE ===
+        shake_x = 0
+        shake_y = 0
+        if self.menu_screen_shake > 0:
+            shake_x = random.randint(-int(self.menu_shake_intensity), int(self.menu_shake_intensity))
+            shake_y = random.randint(-int(self.menu_shake_intensity), int(self.menu_shake_intensity))
+        
+        # Blitear el buffer con el shake offset
+        self.screen.blit(menu_buffer, (shake_x, shake_y))
+        
+        # (Panel oscuro eliminado - los botones ya tienen su propio estilo glassmorphism)
+        
+        # Título principal con efecto moderno
+        title_text = "OPERACIÓN RELÁMPAGO"
+        
+        # Sombra suave del título
+        title_shadow = self.font_large.render(title_text, True, (0, 0, 0, 100))
+        title_rect = title_shadow.get_rect(center=(SCREEN_WIDTH // 2 + 3, 103))
+        self.screen.blit(title_shadow, title_rect)
+        
+        # Título principal con gradiente (simulado)
+        title_surface = self.font_large.render(title_text, True, YELLOW)
+        title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 100))
+        self.screen.blit(title_surface, title_rect)
+        
+        # Efecto de brillo en el título
+        glow_surface = pygame.Surface((title_rect.width + 20, title_rect.height + 20), pygame.SRCALPHA)
+        for i in range(10):
+            alpha = int(30 * (1 - i / 10))
+            pygame.draw.rect(glow_surface, (*YELLOW, alpha), 
+                           (i, i, title_rect.width + 20 - i*2, title_rect.height + 20 - i*2), 1)
+        self.screen.blit(glow_surface, (title_rect.x - 10, title_rect.y - 10))
+        
+        # Subtítulo elegante
+        subtitle = self.font_medium.render("Juego Educativo de Matemáticas", True, CYAN)
+        subtitle_shadow = self.font_medium.render("Juego Educativo de Matemáticas", True, (0, 0, 0, 150))
+        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 170))
+        self.screen.blit(subtitle_shadow, (subtitle_rect.x + 1, subtitle_rect.y + 1))
+        self.screen.blit(subtitle, subtitle_rect)
+        
+        # Dibujar botones
+        for button in self.menu_buttons:
+            button.draw(self.screen)
+        
+        # Decoración elegante
+        if self.menu_blink < 30:
+            star_text = self.font_small.render("✦", True, GOLD)
+            for i in range(3):
+                x = SCREEN_WIDTH // 2 - 150 + i * 150
+                y = 250
+                self.screen.blit(star_text, (x, y))
+
+        # Imágenes decorativas laterales
+        if self.menu_left_img:
+            # Posición izquierda (a la izquierda del título)
+            left_rect = self.menu_left_img.get_rect(midright=(SCREEN_WIDTH // 2 - 300, 130))
+            self.screen.blit(self.menu_left_img, left_rect)
+            
+        if self.menu_right_img:
+            # Posición derecha (a la derecha del título)
+            right_rect = self.menu_right_img.get_rect(midleft=(SCREEN_WIDTH // 2 + 300, 130))
+            self.screen.blit(self.menu_right_img, right_rect)
+    
+    def draw_controls(self):
+        """Dibuja la pantalla de controles con diseño moderno y centrado"""
+        # Título elegante
+        title_text = "CONTROLES E INSTRUCCIONES"
+        title_surface = self.font_large.render(title_text, True, GOLD)
+        title_shadow = self.font_large.render(title_text, True, (0, 0, 0, 150))
+        title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 60))
+        self.screen.blit(title_shadow, (title_rect.x + 2, title_rect.y + 2))
+        self.screen.blit(title_surface, title_rect)
+        
+        # Panel cuadrado centrado con diseño moderno
+        panel_size = 600  # Panel cuadrado
+        panel_x = (SCREEN_WIDTH - panel_size) // 2
+        panel_y = 100
+        
+        # Panel con gradiente y sombra
+        panel = pygame.Surface((panel_size, panel_size), pygame.SRCALPHA)
+        # Fondo con gradiente
+        for i in range(panel_size):
+            progress = i / panel_size
+            alpha = int(220 * (0.7 + progress * 0.3))
+            r = int(20 * (1 - progress * 0.3))
+            g = int(30 * (1 - progress * 0.3))
+            b = int(50 * (1 - progress * 0.3))
+            pygame.draw.line(panel, (r, g, b, alpha), (0, i), (panel_size, i))
+        
+        # Borde elegante más grueso
+        pygame.draw.rect(panel, (255, 255, 255, 180), (0, 0, panel_size, panel_size), 4)
+        # Sombra del panel
+        shadow = pygame.Surface((panel_size + 12, panel_size + 12), pygame.SRCALPHA)
+        shadow.fill((0, 0, 0, 120))
+        self.screen.blit(shadow, (panel_x - 6, panel_y - 6))
+        self.screen.blit(panel, (panel_x, panel_y))
+        
+        # Controles minimalistas con información esencial
+        controls_info = [
+            ("CONTROLES DE JUEGO", GOLD, True),
+            ("W = Suma  |  A = Resta", CYAN, False),
+            ("S = Multiplicación  |  D = División", CYAN, False),
+            ("", WHITE, False),
+            ("NAVEGACIÓN", GOLD, True),
+            ("ESC = Menú / Pausa", WHITE, False),
+            ("R = Reiniciar", WHITE, False),
+            ("F11 = Pantalla completa", YELLOW, False),
+            ("", WHITE, False),
+            ("INSTRUCCIONES", GOLD, True),
+            ("Responde correctamente → Disparas", GREEN, False),
+            ("Responde incorrectamente → Te atacan", RED, False),
+            ("Derrota todos los enemigos", YELLOW, False)
+        ]
+        
+        # Calcular altura total del contenido para centrarlo verticalmente
+        total_height = 0
+        for text, color, is_header in controls_info:
+            if text:
+                total_height += 30 if is_header else 24
+            else:
+                total_height += 20
+        
+        # Calcular posición inicial para centrar verticalmente
+        content_start_y = panel_y + (panel_size - total_height) // 2
+        y_offset = content_start_y
+        
+        # Dibujar contenido centrado y minimalista
+        for text, color, is_header in controls_info:
+            if text:
+                if is_header:
+                    font = self.font_medium
+                    # Línea decorativa sutil bajo los headers
+                    line_width = 300
+                    line_x = SCREEN_WIDTH // 2 - line_width // 2
+                    pygame.draw.line(self.screen, (color[0]//3, color[1]//3, color[2]//3, 100),
+                                   (line_x, y_offset + 22), (line_x + line_width, y_offset + 22), 1)
+                else:
+                    font = self.font_small
+                
+                # Renderizar texto con centrado perfecto
+                text_surface = font.render(text, True, color)
+                text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
+                
+                # Sombra suave del texto
+                text_shadow = font.render(text, True, (0, 0, 0, 100))
+                self.screen.blit(text_shadow, (text_rect.x + 1, text_rect.y + 1))
+                self.screen.blit(text_surface, text_rect)
+                
+                y_offset += 30 if is_header else 24
+            else:
+                y_offset += 20
+        
+        # Dibujar botón volver (bien separado del panel)
+        for button in self.controls_buttons:
+            button.draw(self.screen)
+    
+    def draw_settings(self):
+        """Dibuja la pantalla de configuración de sonido con sliders modernos"""
+        # Título elegante
+        title_text = "CONFIGURACIÓN DE SONIDO"
+        title_surface = self.font_large.render(title_text, True, PURPLE)
+        title_shadow = self.font_large.render(title_text, True, (0, 0, 0, 150))
+        title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 70))
+        self.screen.blit(title_shadow, (title_rect.x + 2, title_rect.y + 2))
+        self.screen.blit(title_surface, title_rect)
+        
+        # Panel de configuración con diseño moderno
+        panel_width = 650
+        panel_height = 380
+        panel_x = (SCREEN_WIDTH - panel_width) // 2
+        panel_y = 130
+        
+        # Panel con gradiente
+        panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        for i in range(panel_height):
+            progress = i / panel_height
+            alpha = int(220 * (0.7 + progress * 0.3))
+            r = int(30 * (1 - progress * 0.2))
+            g = int(20 * (1 - progress * 0.2))
+            b = int(40 * (1 - progress * 0.2))
+            pygame.draw.line(panel, (r, g, b, alpha), (0, i), (panel_width, i))
+        
+        pygame.draw.rect(panel, (255, 255, 255, 150), (0, 0, panel_width, panel_height), 3)
+        shadow = pygame.Surface((panel_width + 10, panel_height + 10), pygame.SRCALPHA)
+        shadow.fill((0, 0, 0, 100))
+        self.screen.blit(shadow, (panel_x - 5, panel_y - 5))
+        self.screen.blit(panel, (panel_x, panel_y))
+        
+        # Volumen de música
+        music_y = panel_y + 60
+        music_label = self.font_medium.render("VOLUMEN DE MÚSICA", True, CYAN)
+        music_label_rect = music_label.get_rect(center=(SCREEN_WIDTH // 2, music_y))
+        self.screen.blit(music_label, music_label_rect)
+        
+        # Slider de música
+        slider_y = music_y + 50
+        self.music_slider.rect.y = slider_y
+        self.music_slider.draw(self.screen)
+        
+        # Texto del volumen de música
+        volume_text = self.font_small.render(f"{int(self.music_volume * 100)}%", True, WHITE)
+        volume_rect = volume_text.get_rect(center=(SCREEN_WIDTH // 2, slider_y + 35))
+        self.screen.blit(volume_text, volume_rect)
+        
+        # Instrucciones para música
+        music_inst = self.font_tiny.render("Arrastra el control deslizante para ajustar", True, (200, 200, 200))
+        inst_rect = music_inst.get_rect(center=(SCREEN_WIDTH // 2, slider_y + 55))
+        self.screen.blit(music_inst, inst_rect)
+        
+        # Volumen de efectos de sonido
+        sound_y = music_y + 180
+        sound_label = self.font_medium.render("VOLUMEN DE EFECTOS", True, CYAN)
+        sound_label_rect = sound_label.get_rect(center=(SCREEN_WIDTH // 2, sound_y))
+        self.screen.blit(sound_label, sound_label_rect)
+        
+        # Slider de efectos
+        sound_slider_y = sound_y + 50
+        self.sound_slider.rect.y = sound_slider_y
+        self.sound_slider.draw(self.screen)
+        
+        # Texto del volumen de efectos
+        sound_volume_text = self.font_small.render(f"{int(self.sound_volume * 100)}%", True, WHITE)
+        sound_volume_rect = sound_volume_text.get_rect(center=(SCREEN_WIDTH // 2, sound_slider_y + 35))
+        self.screen.blit(sound_volume_text, sound_volume_rect)
+        
+        # Instrucciones para efectos
+        sound_inst = self.font_tiny.render("Arrastra el control deslizante para ajustar", True, (200, 200, 200))
+        sound_inst_rect = sound_inst.get_rect(center=(SCREEN_WIDTH // 2, sound_slider_y + 55))
+        self.screen.blit(sound_inst, sound_inst_rect)
+        
+        # Dibujar botón volver
+        for button in self.settings_buttons:
+            button.draw(self.screen)
+    
+    def draw_level_intro(self):
+        """Dibuja la introducción del nivel con pixel art"""
+        # Título del nivel con estilo pixel art
+        level_text = f"NIVEL {self.level}"
+        
+        # Si es modo infinito, mostrar indicador especial
+        if self.modo_infinito:
+            mode_text = self.font_medium.render("⚡ MODO INFINITO ⚡", True, PURPLE)
+            mode_rect = mode_text.get_rect(center=(SCREEN_WIDTH // 2, 130))
+            self.screen.blit(mode_text, mode_rect)
+            
+            # Subtítulo explicativo
+            sub_text = self.font_small.render("Tiempo Adaptativo con ML", True, PINK)
+            sub_rect = sub_text.get_rect(center=(SCREEN_WIDTH // 2, 160))
+            self.screen.blit(sub_text, sub_rect)
+        
+        # Crear efecto pixel art con múltiples capas
+        for i in range(5):
+            offset = i
+            alpha = 255 - (i * 50)
+            if alpha > 0:
+                color = (YELLOW[0], YELLOW[1], YELLOW[2])
+                if i > 0:
+                    color = (color[0] - i*20, color[1] - i*20, color[2] - i*20)
+                level_surface = self.font_pixel.render(level_text, True, color)
+                level_rect = level_surface.get_rect(center=(SCREEN_WIDTH // 2 + offset, 200 + offset))
+                self.screen.blit(level_surface, level_rect)
+        
+        # Título principal
+        level_surface = self.font_pixel.render(level_text, True, YELLOW)
+        level_rect = level_surface.get_rect(center=(SCREEN_WIDTH // 2, 200))
+        self.screen.blit(level_surface, level_rect)
+        
+        # Borde pixel art
+        border_size = 4
+        pygame.draw.rect(self.screen, YELLOW, 
+                        (level_rect.x - border_size, level_rect.y - border_size,
+                         level_rect.width + border_size * 2, level_rect.height + border_size * 2), 
+                        border_size)
+        
+        # Descripción del nivel
+        descriptions = {
+            1: "Espacio Azul - Naves Básicas",
+            2: "Nebulosa Púrpura - Naves Intermedias",
+            3: "Espacio Rojo - Naves Avanzadas"
+        }
+        
+        desc_text = self.font_medium.render(descriptions[self.level], True, CYAN)
+        desc_rect = desc_text.get_rect(center=(SCREEN_WIDTH // 2, 280))
+        self.screen.blit(desc_text, desc_rect)
+        
+        # En modo infinito, mostrar tiempo predicho inicial
+        if self.modo_infinito and self.tiempo_adaptativo:
+            tiempo_info = f"Tiempo inicial: {self.tiempo_adaptativo.tiempo_actual:.1f}s"
+            tiempo_text = self.font_small.render(tiempo_info, True, GOLD)
+            tiempo_rect = tiempo_text.get_rect(center=(SCREEN_WIDTH // 2, 320))
+            self.screen.blit(tiempo_text, tiempo_rect)
+        
+        # Contador o texto de espera
+        if self.level_intro_timer > 0:
+            wait_text = self.font_small.render(
+                f"Preparándose... {self.level_intro_timer // 60 + 1}", True, WHITE
+            )
+        else:
+            wait_text = self.font_small.render("Presiona ESPACIO para comenzar", True, GREEN)
+        wait_rect = wait_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
+        self.screen.blit(wait_text, wait_rect)
+
+    
+    def draw_pause_menu(self):
+        """Dibuja el menú de pausa durante el juego"""
+        # Overlay semitransparente oscuro
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Panel central con diseño moderno
+        panel_width = 500
+        panel_height = 450
+        panel_x = (SCREEN_WIDTH - panel_width) // 2
+        panel_y = (SCREEN_HEIGHT - panel_height) // 2
+        
+        # Panel con gradiente
+        panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        for i in range(panel_height):
+            progress = i / panel_height
+            alpha = int(240 * (0.8 + progress * 0.2))
+            r = int(15 * (1 - progress * 0.3))
+            g = int(15 * (1 - progress * 0.3))
+            b = int(25 * (1 - progress * 0.3))
+            pygame.draw.line(panel, (r, g, b, alpha), (0, i), (panel_width, i))
+        
+        # Borde elegante
+        pygame.draw.rect(panel, (255, 255, 255, 180), (0, 0, panel_width, panel_height), 4)
+        
+        # Sombra del panel
+        shadow = pygame.Surface((panel_width + 15, panel_height + 15), pygame.SRCALPHA)
+        shadow.fill((0, 0, 0, 120))
+        self.screen.blit(shadow, (panel_x - 7, panel_y - 7))
+        self.screen.blit(panel, (panel_x, panel_y))
+        
+        # Título del menú de pausa
+        pause_title = self.font_large.render("JUEGO PAUSADO", True, YELLOW)
+        pause_shadow = self.font_large.render("JUEGO PAUSADO", True, (0, 0, 0, 150))
+        pause_rect = pause_title.get_rect(center=(SCREEN_WIDTH // 2, panel_y + 50))
+        self.screen.blit(pause_shadow, (pause_rect.x + 2, pause_rect.y + 2))
+        self.screen.blit(pause_title, pause_rect)
+        
+        # Línea decorativa
+        line_width = 300
+        line_x = SCREEN_WIDTH // 2 - line_width // 2
+        pygame.draw.line(self.screen, (YELLOW[0]//2, YELLOW[1]//2, YELLOW[2]//2, 150),
+                        (line_x, panel_y + 90), (line_x + line_width, panel_y + 90), 3)
+        
+        # Dibujar botones del menú de pausa
+        for button in self.pause_buttons:
+            button.draw(self.screen)
+        
+        # Instrucción
+        hint_text = self.font_tiny.render("Presiona ESC para reanudar", True, (200, 200, 200))
+        hint_rect = hint_text.get_rect(center=(SCREEN_WIDTH // 2, panel_y + panel_height - 30))
+        self.screen.blit(hint_text, hint_rect)
+    
+    def draw(self):
+        """Dibuja todos los elementos del juego"""
+        # Dibujar fondo
+        self.draw_background()
+        
+        if self.game_state == "menu":
+            self.draw_menu()
+        elif self.game_state == "controls":
+            self.draw_controls()
+        elif self.game_state == "settings":
+            self.draw_settings()
+        elif self.game_state == "level_intro":
+            self.draw_level_intro()
+        elif self.game_state == "playing":
+            # Dibujar elementos del juego
+            self.player.draw(self.screen)
+            
+            # Dibujar enemigos
+            for enemy in self.enemies:
+                enemy.draw(self.screen)
+            
+            # Dibujar explosiones
+            for explosion in self.explosions:
+                explosion.draw(self.screen)
+            
+            # Dibujar proyectiles
+            for projectile in self.player_projectiles:
+                projectile.draw(self.screen)
+            
+            for projectile in self.enemy_projectiles:
+                projectile.draw(self.screen)
+            
+            self.draw_ui()
+            
+            # Dibujar mascota (encima de la UI)
+            self.mascota.draw(self.screen)
+        elif self.game_state == "paused":
+            # Dibujar elementos del juego (fondo)
+            self.player.draw(self.screen)
+            for enemy in self.enemies:
+                enemy.draw(self.screen)
+            for explosion in self.explosions:
+                explosion.draw(self.screen)
+            for projectile in self.player_projectiles:
+                projectile.draw(self.screen)
+            for projectile in self.enemy_projectiles:
+                projectile.draw(self.screen)
+            
+            # Dibujar menú de pausa
+            self.draw_pause_menu()
+        else:
+            # Dibujar pantalla de fin de juego
+            self.player.draw(self.screen)
+            for enemy in self.enemies:
+                enemy.draw(self.screen)
+            for explosion in self.explosions:
+                explosion.draw(self.screen)
+            self.draw_game_over()
+        
+        pygame.display.flip()
+    
+    def run(self):
+        """Bucle principal del juego"""
+        while self.running:
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    self.running = False
+            
+            keys = pygame.key.get_pressed()
+            self.handle_input(keys, events)
+            self.update()
+            self.draw()
+            self.clock.tick(FPS)
+        
+        pygame.quit()
+        sys.exit()
