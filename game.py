@@ -1474,7 +1474,7 @@ class Game:
 
         
         # Panel del problema matemático (ubicado más abajo para no tapar al enemigo)
-        problem_y_offset = 350  # Posición más abajo en la pantalla
+        problem_y_offset = 250  # Posición ajustada para estar más arriba
         problem_bg = pygame.Surface((SCREEN_WIDTH - 40, 100), pygame.SRCALPHA)
         problem_bg.fill((0, 0, 0, 200))
         self.screen.blit(problem_bg, (20, problem_y_offset))
@@ -1572,27 +1572,59 @@ class Game:
             self.screen.blit(inst_text, inst_rect)
         else:
             # Dibujar teclas visuales (W, A, S, D)
-            controls = [('W', '+'), ('A', '-'), ('S', '*'), ('D', '/')]
-            start_x = SCREEN_WIDTH // 2 - 140
-            y_pos = problem_y_offset + 65
-            spacing = 80
+            # Dibujar teclas visuales (W, A, S, D) - REDISEÑADO
+            # Configuración: Tecla, Operación, Color
+            controls_config = [
+                ('W', '+', RED), 
+                ('A', '-', BLUE), 
+                ('S', '*', YELLOW), 
+                ('D', '/', GREEN)
+            ]
             
-            for i, (key, op) in enumerate(controls):
+            # Configuración de diseño
+            button_size = 50
+            spacing = 110
+            total_width = len(controls_config) * spacing
+            start_x = SCREEN_WIDTH // 2 - total_width // 2 + spacing // 2 - button_size // 2
+            y_pos = problem_y_offset + 75
+            
+            for i, (key, op, color) in enumerate(controls_config):
                 x_pos = start_x + i * spacing
                 
-                # Fondo de la tecla
-                key_rect = pygame.Rect(x_pos, y_pos - 10, 24, 24)
-                pygame.draw.rect(self.screen, (60, 60, 70), key_rect, border_radius=5)
-                pygame.draw.rect(self.screen, (150, 150, 160), key_rect, 2, border_radius=5)
+                # Rectángulo del botón (Operación)
+                btn_rect = pygame.Rect(x_pos, y_pos, button_size, button_size)
+                
+                # Sombra (offset)
+                shadow_color = (max(0, color[0]-50), max(0, color[1]-50), max(0, color[2]-50))
+                shadow_rect = pygame.Rect(x_pos, y_pos + 5, button_size, button_size)
+                pygame.draw.rect(self.screen, shadow_color, shadow_rect, border_radius=12)
+                
+                # Botón principal
+                pygame.draw.rect(self.screen, color, btn_rect, border_radius=12)
+                
+                # Borde blanco suave
+                pygame.draw.rect(self.screen, WHITE, btn_rect, 2, border_radius=12)
+                
+                # Símbolo de operación - Texto Grande
+                text_color = BLACK if color in [YELLOW, GREEN] else WHITE
+                op_surf = self.font_large.render(op, True, text_color)
+                op_rect = op_surf.get_rect(center=btn_rect.center)
+                self.screen.blit(op_surf, op_rect)
+                
+                # Marcador AZUL con la tecla (al lado derecho)
+                marker_color = BLUE
+                marker_radius = 15
+                marker_x = x_pos + button_size + 15
+                marker_y = y_pos + button_size // 2
+                
+                # Círculo del marcador
+                pygame.draw.circle(self.screen, marker_color, (marker_x, marker_y), marker_radius)
+                pygame.draw.circle(self.screen, WHITE, (marker_x, marker_y), marker_radius, 2)
                 
                 # Letra de la tecla
-                key_surf = self.font_tiny.render(key, True, WHITE)
-                key_rect_center = key_surf.get_rect(center=key_rect.center)
-                self.screen.blit(key_surf, key_rect_center)
-                
-                # Símbolo de operación
-                op_surf = self.font_small.render(op, True, CYAN)
-                self.screen.blit(op_surf, (x_pos + 30, y_pos - 8))
+                key_surf = self.font_small.render(key, True, WHITE)
+                key_rect = key_surf.get_rect(center=(marker_x, marker_y))
+                self.screen.blit(key_surf, key_rect)
         
         # Barra de progreso del cooldown (si está activo)
         if self.answer_cooldown > 0:
