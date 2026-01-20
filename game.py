@@ -26,7 +26,7 @@ from effects import (
     ComboIndicator, ComboShockwave, LightningBolt, ComboTextPopup, ComboParticleBurst
 )
 from ui import Button, Slider, CircularButton
-from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada, InfiniteMode
+from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada, InfiniteMode, VictoryCelebration
 from visuals import SpaceObject
 
 
@@ -65,7 +65,7 @@ class Game:
             self.font_pixel = pygame.font.Font(None, 72)
             self.font_button = pygame.font.Font(None, 50)
         self.running = True
-        self.game_state = "menu"  # menu, controls, settings, level_intro, playing, paused, victory, lose
+        self.game_state = "menu"  # menu, controls, settings, level_intro, playing, paused, pre_victory, victory, lose
         self.sound_manager = SoundManager()
         self.level_intro_timer = 0
         self.menu_blink = 0
@@ -77,6 +77,7 @@ class Game:
         self.modo_infinito = False
         self.tiempo_adaptativo = None
         self.infinite_mode = None  # Instancia de InfiniteMode para manejo de oleadas
+        self.victory_celebration = None  # Animación de victoria
 
         
         # Inicializar botones del menú
@@ -1085,6 +1086,27 @@ class Game:
                 self.game_state = "playing"
                 # La música continúa desde el nivel anterior, no se reinicia
             return
+        # Actualizar pre-victoria (animación de celebración)
+        if self.game_state == "pre_victory":
+            # Actualizar explosiones restantes
+            for explosion in self.explosions[:]:
+                explosion.update()
+                if explosion.is_dead():
+                    self.explosions.remove(explosion)
+            
+            # Actualizar efectos de combo
+            for effect in self.combo_effects[:]:
+                effect.update()
+                if effect.is_dead():
+                    self.combo_effects.remove(effect)
+            
+            # Actualizar celebración de victoria
+            if self.victory_celebration:
+                self.victory_celebration.update()
+                if self.victory_celebration.is_finished():
+                    self.game_state = "victory"
+                    self.sound_manager.stop_background_music()
+            return
         
         if self.game_state != "playing":
             return
@@ -1141,8 +1163,9 @@ class Game:
                             self.generate_space_objects()
                             self.sound_manager.change_level_music(self.level, self.music_volume)
                         else:
-                            # Fin del juego (victoria)
-                            self.game_state = "victory"
+                            # Fin del juego - ir a pre_victory para mostrar animación
+                            self.game_state = "pre_victory"
+                            self.victory_celebration = VictoryCelebration()
                             self.sound_manager.play_sound('win', 1.0, self.sound_volume)
         
         # Actualizar objetos espaciales
@@ -1246,9 +1269,10 @@ class Game:
                             self.generate_space_objects()
                             # La música continúa, no se reinicia al pasar de nivel
                         else:
-                            self.game_state = "victory"
-                            # Detener música cuando se gana el juego
-                            self.sound_manager.stop_background_music()
+                            # Fin del juego - ir a pre_victory para mostrar animación
+                            self.game_state = "pre_victory"
+                            self.victory_celebration = VictoryCelebration()
+                            # La música sigue sonando durante la celebración
                             self.sound_manager.play_sound('win', 1.0, self.sound_volume)
             
             # Eliminar proyectiles fuera de pantalla solo si no tienen objetivo válido
@@ -2660,6 +2684,25 @@ class Game:
             
             # Dibujar menú de pausa
             self.draw_pause_menu()
+        elif self.game_state == "pre_victory":
+            # Dibujar estado de pre-victoria (animación del robot celebrando)
+            self.player.draw(self.screen)
+            
+            # Dibujar explosiones restantes
+            for explosion in self.explosions:
+                explosion.draw(self.screen)
+            
+            # Dibujar efectos de combo
+            for effect in self.combo_effects:
+                if hasattr(effect, 'draw'):
+                    if isinstance(effect, ComboTextPopup):
+                        effect.draw(self.screen, self.font_large)
+                    else:
+                        effect.draw(self.screen)
+            
+            # Dibujar animación de celebración
+            if self.victory_celebration:
+                self.victory_celebration.draw(self.screen)
         elif self.game_state == "victory":
             # Dibujar pantalla de victoria (completó nivel 3)
             self.player.draw(self.screen)

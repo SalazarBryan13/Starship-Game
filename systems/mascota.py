@@ -656,3 +656,426 @@ class MascotaAnimada:
         text_rect = text_surface.get_rect(center=(msg_x, msg_y))
         screen.blit(text_shadow, (text_rect.x + 2, text_rect.y + 2))
         screen.blit(text_surface, text_rect)
+
+
+class VictoryCelebration:
+    """
+    Animación de celebración épica cuando el jugador gana el juego.
+    El robot aparece en el centro de la pantalla con efectos festivos.
+    """
+    
+    STATE_ENTERING = 'entering'
+    STATE_CELEBRATING = 'celebrating'
+    STATE_FINISHED = 'finished'
+    
+    def __init__(self):
+        # Posición central
+        self.x = SCREEN_WIDTH // 2
+        self.y = SCREEN_HEIGHT // 2
+        
+        # Animación de entrada (robot sube desde abajo)
+        self.start_y = SCREEN_HEIGHT + 150
+        self.target_y = SCREEN_HEIGHT // 2 - 20
+        
+        # Estado y temporizadores
+        self.state = self.STATE_ENTERING
+        self.entering_timer = 60  # 1 segundo para entrar
+        self.celebrate_timer = 180  # 3 segundos de celebración
+        self.total_timer = 0
+        
+        # Dimensiones del robot (más grande para victoria)
+        self.width = 135
+        self.height = 158
+        
+        # Animaciones
+        self.bounce_offset = 0
+        self.arm_angle = 0
+        self.rotation = 0
+        self.scale = 0.5
+        
+        # Partículas de celebración
+        self.particles = []
+        self.confetti = []
+        self.light_rays = []
+        
+        # Crear rayos de luz iniciales
+        for i in range(12):
+            angle = i * 30
+            self.light_rays.append({
+                'angle': angle,
+                'length': 0,
+                'max_length': random.randint(200, 400),
+                'color': random.choice([GOLD, YELLOW, CYAN, WHITE, PINK]),
+                'width': random.randint(3, 8),
+                'speed': random.uniform(8, 15)
+            })
+        
+        # Colores del robot
+        self.body_color = (35, 70, 110)
+        self.body_highlight = (60, 120, 170)
+        self.eye_color = CYAN
+        self.accent_color = (0, 220, 255)
+        
+        # Fuentes
+        try:
+            self.font_large = pygame.font.Font(None, 72)
+            self.font_medium = pygame.font.Font(None, 48)
+        except:
+            self.font_large = pygame.font.SysFont('arial', 60)
+            self.font_medium = pygame.font.SysFont('arial', 36)
+        
+        # Texto animado
+        self.text_scale = 0
+        self.text_visible = False
+    
+    def update(self):
+        """Actualiza la animación de celebración"""
+        self.total_timer += 1
+        
+        if self.state == self.STATE_ENTERING:
+            self._update_entering()
+        elif self.state == self.STATE_CELEBRATING:
+            self._update_celebrating()
+        
+        # Actualizar partículas
+        for particle in self.particles[:]:
+            particle.update()
+            if particle.is_dead():
+                self.particles.remove(particle)
+        
+        # Actualizar confetti
+        for conf in self.confetti[:]:
+            conf['y'] += conf['vy']
+            conf['x'] += conf['vx']
+            conf['rotation'] += conf['rot_speed']
+            conf['lifetime'] -= 1
+            if conf['lifetime'] <= 0 or conf['y'] > SCREEN_HEIGHT + 50:
+                self.confetti.remove(conf)
+        
+        # Actualizar rayos de luz
+        for ray in self.light_rays:
+            if ray['length'] < ray['max_length']:
+                ray['length'] += ray['speed']
+            ray['angle'] += 0.3  # Rotación lenta
+    
+    def _update_entering(self):
+        """Animación de entrada del robot"""
+        self.entering_timer -= 1
+        progress = 1 - (self.entering_timer / 60)
+        
+        # Efecto de ease-out para la entrada
+        eased = 1 - (1 - progress) ** 3
+        self.y = self.start_y + (self.target_y - self.start_y) * eased
+        self.scale = 0.5 + 0.5 * eased
+        
+        # Crear partículas mientras entra
+        if random.random() < 0.5:
+            particle = CelebrationParticle(
+                self.x + random.randint(-50, 50),
+                self.y + random.randint(-30, 30),
+                intensity=1.5
+            )
+            self.particles.append(particle)
+        
+        if self.entering_timer <= 0:
+            self.state = self.STATE_CELEBRATING
+            self.text_visible = True
+            # Explosión de confetti al llegar
+            self._spawn_confetti_burst(80)
+    
+    def _update_celebrating(self):
+        """Animación de celebración principal"""
+        self.celebrate_timer -= 1
+        
+        # Rebote de alegría
+        self.bounce_offset = math.sin(self.total_timer * 0.2) * 20
+        
+        # Brazos animados (celebrando)
+        self.arm_angle = math.sin(self.total_timer * 0.3) * 45
+        
+        # Ligera rotación
+        self.rotation = math.sin(self.total_timer * 0.1) * 5
+        
+        # Escala del texto (pulso)
+        self.text_scale = 1 + math.sin(self.total_timer * 0.15) * 0.1
+        
+        # Generar confetti continuo
+        if random.random() < 0.4:
+            self._spawn_confetti(3)
+        
+        # Partículas de celebración
+        if random.random() < 0.3:
+            particle = CelebrationParticle(
+                self.x + random.randint(-80, 80),
+                self.y + random.randint(-60, 60),
+                intensity=2.0
+            )
+            self.particles.append(particle)
+        
+        if self.celebrate_timer <= 0:
+            self.state = self.STATE_FINISHED
+    
+    def _spawn_confetti_burst(self, count):
+        """Explosión de confetti"""
+        for _ in range(count):
+            self.confetti.append({
+                'x': self.x + random.randint(-100, 100),
+                'y': self.y + random.randint(-50, 50),
+                'vx': random.uniform(-5, 5),
+                'vy': random.uniform(-10, 2),
+                'color': random.choice([GOLD, CYAN, PINK, GREEN, YELLOW, WHITE, PURPLE]),
+                'size': random.randint(6, 14),
+                'rotation': random.uniform(0, 360),
+                'rot_speed': random.uniform(-10, 10),
+                'lifetime': random.randint(120, 200),
+                'shape': random.choice(['rect', 'circle', 'star'])
+            })
+    
+    def _spawn_confetti(self, count):
+        """Genera confetti desde arriba"""
+        for _ in range(count):
+            self.confetti.append({
+                'x': random.randint(0, SCREEN_WIDTH),
+                'y': -20,
+                'vx': random.uniform(-1, 1),
+                'vy': random.uniform(3, 7),
+                'color': random.choice([GOLD, CYAN, PINK, GREEN, YELLOW, WHITE, PURPLE]),
+                'size': random.randint(5, 12),
+                'rotation': random.uniform(0, 360),
+                'rot_speed': random.uniform(-8, 8),
+                'lifetime': random.randint(150, 250),
+                'shape': random.choice(['rect', 'circle', 'star'])
+            })
+    
+    def is_finished(self):
+        """Retorna True cuando la animación terminó"""
+        return self.state == self.STATE_FINISHED
+    
+    def draw(self, screen):
+        """Dibuja la celebración completa"""
+        # Fondo oscurecido
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 30, 150))
+        screen.blit(overlay, (0, 0))
+        
+        # Rayos de luz (detrás de todo)
+        self._draw_light_rays(screen)
+        
+        # Confetti (detrás del robot)
+        self._draw_confetti(screen)
+        
+        # Partículas
+        for particle in self.particles:
+            particle.draw(screen)
+        
+        # Robot celebrando
+        self._draw_robot(screen)
+        
+        # Texto de victoria
+        if self.text_visible:
+            self._draw_victory_text(screen)
+    
+    def _draw_light_rays(self, screen):
+        """Dibuja rayos de luz radiantes"""
+        center_x = self.x
+        center_y = int(self.y + self.bounce_offset)
+        
+        for ray in self.light_rays:
+            if ray['length'] > 0:
+                angle_rad = math.radians(ray['angle'])
+                end_x = center_x + math.cos(angle_rad) * ray['length']
+                end_y = center_y + math.sin(angle_rad) * ray['length']
+                
+                # Dibujar rayo con gradiente (más brillante en el centro)
+                for i in range(3):
+                    width = ray['width'] - i * 2
+                    if width > 0:
+                        alpha = 100 - i * 30
+                        color = (*ray['color'][:3], alpha)
+                        surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                        pygame.draw.line(surf, color, (center_x, center_y), 
+                                       (end_x, end_y), max(1, width))
+                        screen.blit(surf, (0, 0))
+    
+    def _draw_confetti(self, screen):
+        """Dibuja el confetti"""
+        for conf in self.confetti:
+            alpha = min(255, conf['lifetime'] * 2)
+            size = conf['size']
+            
+            surf = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+            color = (*conf['color'][:3], alpha)
+            
+            if conf['shape'] == 'rect':
+                rect_surf = pygame.Surface((size, size // 2), pygame.SRCALPHA)
+                rect_surf.fill(color)
+                rotated = pygame.transform.rotate(rect_surf, conf['rotation'])
+                surf.blit(rotated, rotated.get_rect(center=(size, size)))
+            elif conf['shape'] == 'circle':
+                pygame.draw.circle(surf, color, (size, size), size // 2)
+            else:  # star
+                self._draw_mini_star(surf, size, size, size // 2, conf['rotation'], color)
+            
+            screen.blit(surf, (int(conf['x']) - size, int(conf['y']) - size))
+    
+    def _draw_mini_star(self, surface, x, y, size, rotation, color):
+        """Dibuja una estrella pequeña"""
+        points = []
+        for i in range(10):
+            angle = math.radians(rotation + i * 36)
+            r = size if i % 2 == 0 else size // 2
+            px = x + math.cos(angle) * r
+            py = y + math.sin(angle) * r
+            points.append((px, py))
+        if len(points) >= 3:
+            pygame.draw.polygon(surface, color, points)
+    
+    def _draw_robot(self, screen):
+        """Dibuja el robot celebrando"""
+        draw_x = self.x - self.width // 2
+        draw_y = int(self.y + self.bounce_offset) - self.height // 2
+        
+        # Aplicar escala
+        scaled_w = int(self.width * self.scale)
+        scaled_h = int(self.height * self.scale)
+        
+        # Superficie para el robot
+        robot_surf = pygame.Surface((self.width + 100, self.height + 100), pygame.SRCALPHA)
+        center_x = (self.width + 100) // 2
+        center_y = (self.height + 100) // 2
+        
+        # Glow alrededor del robot
+        glow_size = 80
+        glow_surf = pygame.Surface((glow_size * 2, glow_size * 2), pygame.SRCALPHA)
+        glow_alpha = int(80 + 40 * math.sin(self.total_timer * 0.1))
+        pygame.draw.circle(glow_surf, (*GOLD, glow_alpha), (glow_size, glow_size), glow_size)
+        robot_surf.blit(glow_surf, (center_x - glow_size, center_y - glow_size))
+        
+        # === ANTENA ===
+        antenna_x = center_x
+        antenna_top_y = center_y - 65
+        pygame.draw.line(robot_surf, (220, 220, 220), 
+                        (antenna_x, center_y - 40), (antenna_x, antenna_top_y), 5)
+        
+        # Luz de antena pulsante
+        glow_size_ant = 12 + int(5 * math.sin(self.total_timer * 0.15))
+        pygame.draw.circle(robot_surf, self.accent_color, (antenna_x, antenna_top_y), glow_size_ant)
+        pygame.draw.circle(robot_surf, WHITE, (antenna_x, antenna_top_y), glow_size_ant - 4)
+        
+        # === CABEZA ===
+        head_rect = pygame.Rect(center_x - 45, center_y - 40, 90, 65)
+        pygame.draw.rect(robot_surf, self.body_color, head_rect, border_radius=18)
+        pygame.draw.rect(robot_surf, self.body_highlight, head_rect, 4, border_radius=18)
+        
+        # === OJOS (felices - arcos hacia arriba) ===
+        eye_y = center_y - 15
+        left_eye_x = center_x - 22
+        right_eye_x = center_x + 22
+        eye_size = 16
+        
+        # Ojos brillantes
+        pygame.draw.circle(robot_surf, (*self.eye_color, 100), (left_eye_x, eye_y), eye_size + 4)
+        pygame.draw.circle(robot_surf, (*self.eye_color, 100), (right_eye_x, eye_y), eye_size + 4)
+        pygame.draw.circle(robot_surf, self.eye_color, (left_eye_x, eye_y), eye_size)
+        pygame.draw.circle(robot_surf, self.eye_color, (right_eye_x, eye_y), eye_size)
+        pygame.draw.circle(robot_surf, WHITE, (left_eye_x - 4, eye_y - 4), 5)
+        pygame.draw.circle(robot_surf, WHITE, (right_eye_x - 4, eye_y - 4), 5)
+        
+        # Arcos de felicidad sobre los ojos
+        pygame.draw.arc(robot_surf, WHITE, 
+                       (left_eye_x - eye_size, eye_y - eye_size, eye_size * 2, eye_size * 2), 
+                       0, math.pi, 4)
+        pygame.draw.arc(robot_surf, WHITE, 
+                       (right_eye_x - eye_size, eye_y - eye_size, eye_size * 2, eye_size * 2), 
+                       0, math.pi, 4)
+        
+        # === BOCA (sonrisa grande) ===
+        mouth_y = center_y + 10
+        pygame.draw.arc(robot_surf, self.accent_color,
+                       (center_x - 25, mouth_y - 15, 50, 30), math.pi, math.pi * 2, 4)
+        
+        # === CUERPO ===
+        body_rect = pygame.Rect(center_x - 35, center_y + 25, 70, 55)
+        pygame.draw.rect(robot_surf, self.body_color, body_rect, border_radius=10)
+        pygame.draw.rect(robot_surf, self.body_highlight, body_rect, 4, border_radius=10)
+        
+        # Panel central brillante
+        panel_glow = abs(math.sin(self.total_timer * 0.1)) * 0.5 + 0.5
+        panel_color = (int(self.accent_color[0] * panel_glow),
+                      int(self.accent_color[1] * panel_glow),
+                      int(self.accent_color[2] * panel_glow))
+        pygame.draw.rect(robot_surf, panel_color, (center_x - 15, center_y + 40, 30, 18), border_radius=4)
+        
+        # === BRAZOS (arriba celebrando) ===
+        arm_y = center_y + 35
+        arm_length = 35
+        
+        # Ángulos de brazos arriba con movimiento
+        left_angle = math.radians(-120 + self.arm_angle)
+        right_angle = math.radians(-60 - self.arm_angle)
+        
+        # Brazo izquierdo
+        left_start = (center_x - 35, arm_y)
+        left_end = (int(center_x - 35 + math.cos(left_angle) * arm_length),
+                   int(arm_y + math.sin(left_angle) * arm_length))
+        pygame.draw.line(robot_surf, self.body_highlight, left_start, left_end, 10)
+        pygame.draw.circle(robot_surf, self.accent_color, left_end, 8)
+        
+        # Brazo derecho
+        right_start = (center_x + 35, arm_y)
+        right_end = (int(center_x + 35 + math.cos(right_angle) * arm_length),
+                    int(arm_y + math.sin(right_angle) * arm_length))
+        pygame.draw.line(robot_surf, self.body_highlight, right_start, right_end, 10)
+        pygame.draw.circle(robot_surf, self.accent_color, right_end, 8)
+        
+        # === PIERNAS ===
+        leg_y = center_y + 75
+        pygame.draw.rect(robot_surf, self.body_highlight, (center_x - 28, leg_y, 20, 22), border_radius=5)
+        pygame.draw.rect(robot_surf, self.body_highlight, (center_x + 8, leg_y, 20, 22), border_radius=5)
+        
+        # Escalar y rotar el robot
+        if self.scale != 1.0 or self.rotation != 0:
+            new_w = int((self.width + 100) * self.scale)
+            new_h = int((self.height + 100) * self.scale)
+            if new_w > 0 and new_h > 0:
+                robot_surf = pygame.transform.scale(robot_surf, (new_w, new_h))
+                robot_surf = pygame.transform.rotate(robot_surf, self.rotation)
+        
+        rect = robot_surf.get_rect(center=(self.x, int(self.y + self.bounce_offset)))
+        screen.blit(robot_surf, rect)
+    
+    def _draw_victory_text(self, screen):
+        """Dibuja el texto de victoria animado"""
+        text_y = self.y - 140
+        
+        # Texto principal
+        victory_text = "¡VICTORIA!"
+        text_surf = self.font_large.render(victory_text, True, GOLD)
+        text_shadow = self.font_large.render(victory_text, True, (50, 30, 0))
+        
+        # Aplicar escala
+        if self.text_scale != 1.0:
+            new_w = int(text_surf.get_width() * self.text_scale)
+            new_h = int(text_surf.get_height() * self.text_scale)
+            if new_w > 0 and new_h > 0:
+                text_surf = pygame.transform.scale(text_surf, (new_w, new_h))
+                text_shadow = pygame.transform.scale(text_shadow, (new_w, new_h))
+        
+        text_rect = text_surf.get_rect(center=(self.x, text_y))
+        
+        # Glow detrás del texto
+        glow_surf = pygame.Surface((text_rect.width + 40, text_rect.height + 40), pygame.SRCALPHA)
+        glow_alpha = int(80 + 40 * math.sin(self.total_timer * 0.1))
+        pygame.draw.rect(glow_surf, (*GOLD, glow_alpha), (0, 0, text_rect.width + 40, text_rect.height + 40), 
+                        border_radius=15)
+        screen.blit(glow_surf, (text_rect.x - 20, text_rect.y - 20))
+        
+        # Sombra y texto
+        screen.blit(text_shadow, (text_rect.x + 3, text_rect.y + 3))
+        screen.blit(text_surf, text_rect)
+        
+        # Subtítulo
+        sub_text = "¡Nivel Completado!"
+        sub_surf = self.font_medium.render(sub_text, True, WHITE)
+        sub_rect = sub_surf.get_rect(center=(self.x, text_y + 50))
+        screen.blit(sub_surf, sub_rect)
