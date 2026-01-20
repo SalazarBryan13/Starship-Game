@@ -361,6 +361,9 @@ class Game:
     
     def reset_game(self):
         """Reinicia el juego"""
+        # Detener el sonido final si está reproduciéndose
+        self.sound_manager.stop_final_sound()
+        
         self.level = 1
         self.player = Player(SCREEN_WIDTH // 2 - 25, SCREEN_HEIGHT - 80)
         self.enemies = []  # Lista de enemigos (múltiples)
@@ -566,6 +569,8 @@ class Game:
                 
                 # Tecla R para reiniciar
                 if event.key == pygame.K_r and self.game_state in ["victory", "lose"]:
+                    # Detener el sonido final antes de volver al menú
+                    self.sound_manager.stop_final_sound()
                     self.game_state = "menu"
                     self.sound_manager.play_menu_music(self.music_volume)
                     self.paused = False
@@ -660,6 +665,8 @@ class Game:
             for event in events:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
+                        # Detener el sonido final antes de reiniciar o volver al menú
+                        self.sound_manager.stop_final_sound()
                         # Reiniciar juego
                         self.reset_game()
                         # Si era victoria y reinicia, el nivel vuelve a 1
@@ -667,6 +674,8 @@ class Game:
                         self.level_intro_timer = 180
                         self.sound_manager.change_level_music(self.level, self.music_volume)
                     elif event.key == pygame.K_ESCAPE or event.key == pygame.K_RETURN:
+                        # Detener el sonido final antes de volver al menú
+                        self.sound_manager.stop_final_sound()
                         # Volver al menú
                         self.game_state = "menu"
                         self.sound_manager.play_menu_music(self.music_volume)
@@ -831,9 +840,14 @@ class Game:
                 explosion = Explosion(enemy_center_x, enemy_center_y)
                 self.explosions.append(explosion)
         
-        # Sonido épico (usar sonido de disparo con más volumen)
-        self.sound_manager.play_sound('correct', 0.8, self.sound_volume)
-        self.sound_manager.play_sound('shoot', 0.5, self.sound_volume)
+        # Sonido épico
+        # Si existe el sonido especial de combo, usarlo con prioridad y volumen alto
+        if 'laser_combo' in self.sound_manager.sounds and self.sound_manager.sounds['laser_combo']:
+            self.sound_manager.play_sound('laser_combo', 1.0, self.sound_volume)
+        else:
+            # Fallback a combinación de sonidos
+            self.sound_manager.play_sound('correct', 0.8, self.sound_volume)
+            self.sound_manager.play_sound('shoot', 0.5, self.sound_volume)
         
         # Actualizar indicador de combo (resetear visualmente)
         self.combo_indicator.update(0)
@@ -1172,7 +1186,17 @@ class Game:
                             # Fin del juego - ir a pre_victory para mostrar animación
                             self.game_state = "pre_victory"
                             self.victory_celebration = VictoryCelebration()
-                            self.sound_manager.play_sound('win', 1.0, self.sound_volume)
+                            
+                            # Detener música de fondo SIEMPRE al ganar
+                            self.sound_manager.stop_background_music()
+                            
+                            # Reproducir sonido final si existe (prioridad sobre 'win')
+                            # Reproducir en loop infinito (-1) hasta que el usuario presione 'r'
+                            if 'final' in self.sound_manager.sounds and self.sound_manager.sounds['final']:
+                                # Reproducir con volumen máximo en loop infinito
+                                self.sound_manager.play_sound('final', 1.0, 1.0, loops=-1)
+                            else:
+                                self.sound_manager.play_sound('win', 1.0, self.sound_volume)
         
         # Actualizar objetos espaciales
         for obj in self.space_objects:
@@ -1278,8 +1302,24 @@ class Game:
                             # Fin del juego - ir a pre_victory para mostrar animación
                             self.game_state = "pre_victory"
                             self.victory_celebration = VictoryCelebration()
-                            # La música sigue sonando durante la celebración
-                            self.sound_manager.play_sound('win', 1.0, self.sound_volume)
+                            
+                            print("DEBUG: Entrando a lógica de victoria. Estado de sonidos:")
+                            print(f"DEBUG: Keys disponibles: {list(self.sound_manager.sounds.keys())}")
+                            print(f"DEBUG: 'final' cargado: {'final' in self.sound_manager.sounds and self.sound_manager.sounds['final'] is not None}")
+                            
+                            # Detener música de fondo SIEMPRE al ganar
+                            self.sound_manager.stop_background_music()
+                            print("DEBUG: Música de fondo detenida")
+                            
+                            # Reproducir sonido final si existe (prioridad sobre 'win')
+                            # Reproducir en loop infinito (-1) hasta que el usuario presione 'r'
+                            if 'final' in self.sound_manager.sounds and self.sound_manager.sounds['final']:
+                                # Reproducir con volumen máximo en loop infinito
+                                self.sound_manager.play_sound('final', 1.0, 1.0, loops=-1)
+                                print("DEBUG: ¡VICTORIA! Reproduciendo sonido final.wav en loop")
+                            else:
+                                print(f"DEBUG: No se encontró 'final', reproduciendo 'win'")
+                                self.sound_manager.play_sound('win', 1.0, self.sound_volume)
             
             # Eliminar proyectiles fuera de pantalla solo si no tienen objetivo válido
             if projectile in self.player_projectiles:
@@ -1812,7 +1852,7 @@ class Game:
         self.screen.blit(score_panel, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2))
         
         # Instrucciones
-        back_text = self.font_medium.render("Presiona ENTER o ESC para volver al Menú", True, CYAN)
+        back_text = self.font_medium.render("Presiona R para reiniciar o ENTER/ESC para volver al Menú", True, CYAN)
         back_rect = back_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 150))
         
         # Parpadeo suave

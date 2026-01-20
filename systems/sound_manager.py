@@ -32,6 +32,7 @@ class SoundManager:
         self.current_level = 1
         self.music_channel = None
         self.hit_sound_index = 0  # Para alternar entre los dos sonidos de hit
+        self.final_sound_channel = None  # Canal para el sonido final (para poder detenerlo)
         self._create_professional_sounds()
         # No iniciar música automáticamente, se iniciará cuando comience el juego
     
@@ -294,9 +295,42 @@ class SoundManager:
         return pygame.sndarray.make_sound(sound_array)
     
     def _create_professional_sounds(self):
-        """Crea sonidos profesionales usando scipy"""
+        """Crea sonidos profesionales usando scipy o carga archivos si existen"""
         try:
+            # Inicializar diccionario de sonidos
+            sound_keys = ['shoot', 'explosion', 'hit', 'correct', 'wrong', 'damage']
+            for key in sound_keys:
+                self.sounds[key] = None
+
+            # Intentar cargar sonidos personalizados desde la carpeta sounds
+            sounds_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sounds')
+            
+            # Cargar laser_combo si existe (sonido especial para combo)
+            combo_path = os.path.join(sounds_dir, 'laser_combo.wav')
+            if os.path.exists(combo_path):
+                try:
+                    self.sounds['laser_combo'] = pygame.mixer.Sound(combo_path)
+                    print(f"✓ Sonido de combo cargado: {combo_path}")
+                except Exception as e:
+                    print(f"Error cargando laser_combo: {e}")
+                    self.sounds['laser_combo'] = None
+            else:
+                self.sounds['laser_combo'] = None
+
+            # Cargar final.wav (sonido de victoria final)
+            final_path = os.path.join(sounds_dir, 'final.wav')
+            if os.path.exists(final_path):
+                try:
+                    self.sounds['final'] = pygame.mixer.Sound(final_path)
+                    print(f"✓ Sonido final cargado: {final_path}")
+                except Exception as e:
+                    print(f"Error cargando final.wav: {e}")
+                    self.sounds['final'] = None
+            else:
+                self.sounds['final'] = None
+
             if HAS_NUMPY:
+                # Generar sonidos sintetizados si no se cargaron archivos (o para complementar)
                 self.sounds['shoot'] = self._generate_laser_shot()
                 self.sounds['explosion'] = self._generate_explosion()
                 self.sounds['hit'] = self._generate_hit()
@@ -304,13 +338,10 @@ class SoundManager:
                 self.sounds['wrong'] = self._generate_error_buzz()
                 self.sounds['damage'] = self._generate_damage_sound()
             else:
-                print("Numpy no disponible, sonidos deshabilitados")
-                for name in ['shoot', 'explosion', 'hit', 'correct', 'wrong', 'damage']:
-                    self.sounds[name] = None
+                print("Numpy no disponible, sonidos generados deshabilitados")
+                
         except Exception as e:
             print(f"Error creando sonidos profesionales: {e}")
-            for name in ['shoot', 'explosion', 'hit', 'correct', 'wrong', 'damage']:
-                self.sounds[name] = None
     
     def _start_background_music(self, level=1, volume=0.5):
         """Inicia música de fondo desde archivo Battleship.ogg"""
@@ -358,6 +389,9 @@ class SoundManager:
             return
 
         try:
+            # Detener cualquier música que esté sonando antes de reproducir la del menú
+            pygame.mixer.music.stop()
+            
             music_path = os.path.join(os.path.dirname(__file__), "..", "sounds", "Brave Pilots (Menu Screen).ogg")
             if not os.path.exists(music_path):
                 print(f"Error: No se encontró {music_path}")
@@ -372,8 +406,15 @@ class SoundManager:
         except Exception as e:
             print(f"Error cargando música de menú: {e}")
     
-    def play_sound(self, sound_name, volume=0.5, game_sound_volume=1.0):
-        """Reproduce un sonido con volumen ajustable"""
+    def play_sound(self, sound_name, volume=0.5, game_sound_volume=1.0, loops=0):
+        """Reproduce un sonido con volumen ajustable
+        
+        Args:
+            sound_name: Nombre del sonido a reproducir
+            volume: Volumen base (0.0 a 1.0)
+            game_sound_volume: Volumen del juego (0.0 a 1.0)
+            loops: Número de loops (-1 para loop infinito, 0 para reproducir una vez)
+        """
         try:
             if sound_name in self.sounds and self.sounds[sound_name] is not None:
                 if sound_name == 'hit':
@@ -382,6 +423,22 @@ class SoundManager:
                     final_volume = volume * game_sound_volume
                 
                 self.sounds[sound_name].set_volume(final_volume)
-                self.sounds[sound_name].play()
+                channel = self.sounds[sound_name].play(loops=loops)
+                
+                # Guardar el canal si es el sonido final para poder detenerlo después
+                if sound_name == 'final':
+                    self.final_sound_channel = channel
+                
+                return channel
+        except Exception as e:
+            pass
+        return None
+    
+    def stop_final_sound(self):
+        """Detiene el sonido final si está reproduciéndose"""
+        try:
+            if self.final_sound_channel is not None:
+                self.final_sound_channel.stop()
+                self.final_sound_channel = None
         except Exception as e:
             pass
