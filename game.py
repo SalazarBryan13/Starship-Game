@@ -26,7 +26,7 @@ from effects import (
     ComboIndicator, ComboShockwave, LightningBolt, ComboTextPopup, ComboParticleBurst
 )
 from ui import Button, Slider, CircularButton
-from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada
+from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada, InfiniteMode
 from visuals import SpaceObject
 
 
@@ -65,7 +65,7 @@ class Game:
             self.font_pixel = pygame.font.Font(None, 72)
             self.font_button = pygame.font.Font(None, 50)
         self.running = True
-        self.game_state = "menu"  # menu, controls, settings, level_intro, playing, paused, win, lose
+        self.game_state = "menu"  # menu, controls, settings, level_intro, playing, paused, victory, lose
         self.sound_manager = SoundManager()
         self.level_intro_timer = 0
         self.menu_blink = 0
@@ -76,6 +76,7 @@ class Game:
         # Variables para modo infinito con tiempo adaptativo ML
         self.modo_infinito = False
         self.tiempo_adaptativo = None
+        self.infinite_mode = None  # Instancia de InfiniteMode para manejo de oleadas
 
         
         # Inicializar botones del menú
@@ -367,7 +368,10 @@ class Game:
         self.question_timer = 600  # Temporizador de 10 segundos (600 frames a 60 FPS)
         self.question_timer_max = 600  # Tiempo máximo en frames
         self.explosions = []
-        self.oleada_infinita = 1  # Contador de oleadas en modo infinito
+        
+        # Resetear sistema de combo
+        self.combo_streak = 0
+        self.combo_effects = []
         
         # Mascota animada (robot que da ánimos)
         self.mascota = MascotaAnimada()
@@ -395,6 +399,34 @@ class Game:
                 config["enemy_hp"],
                 config["enemy_speed"],
                 self.level
+            )
+            # Variar dirección inicial
+            enemy.direction = random.choice([-1, 1])
+            enemy.move_counter = random.randint(0, 30)
+            self.enemies.append(enemy)
+    
+    def generate_enemies_infinite(self, wave_config):
+        """Genera enemigos para modo infinito con configuración escalable"""
+        num_enemies = wave_config["num_enemies"]
+        enemy_hp = wave_config["enemy_hp"]
+        enemy_speed = wave_config["enemy_speed"]
+        visual_level = wave_config["visual_level"]
+        
+        self.enemies = []
+        
+        # Distribuir enemigos horizontalmente
+        spacing = SCREEN_WIDTH // (num_enemies + 1)
+        start_x = spacing
+        
+        for i in range(num_enemies):
+            # Variar ligeramente la posición Y para más dinamismo
+            y_offset = random.randint(-20, 20)
+            enemy = Enemy(
+                start_x + i * spacing - 30,
+                100 + y_offset,
+                enemy_hp,
+                enemy_speed,
+                visual_level  # Usar visual_level para el diseño del enemigo
             )
             # Variar dirección inicial
             enemy.direction = random.choice([-1, 1])
@@ -526,7 +558,7 @@ class Game:
                     continue
                 
                 # Tecla R para reiniciar
-                if event.key == pygame.K_r and self.game_state in ["win", "lose"]:
+                if event.key == pygame.K_r and self.game_state in ["victory", "lose"]:
                     self.game_state = "menu"
                     self.sound_manager.play_menu_music(self.music_volume)
                     self.paused = False
@@ -545,15 +577,20 @@ class Game:
                         self.level_intro_timer = 180
                         self.level = 1
                         self.reset_game()
-                        self.sound_manager.change_level_music(1)
+                        self.sound_manager.change_level_music(1, self.music_volume)
                     elif i == 1:  # MODO INFINITO (con ML adaptativo)
                         self.modo_infinito = True
                         self.tiempo_adaptativo = TiempoAdaptativo()
+                        self.infinite_mode = InfiniteMode()
                         self.game_state = "level_intro"
                         self.level_intro_timer = 180
-                        self.level = 1
+                        # Obtener primera oleada
+                        wave_config = self.infinite_mode.next_wave()
+                        self.level = wave_config["visual_level"]
                         self.reset_game()
-                        self.sound_manager.change_level_music(1, self.music_volume)
+                        # Regenerar enemigos con config de oleada infinita
+                        self.generate_enemies_infinite(wave_config)
+                        self.sound_manager.change_level_music(self.level, self.music_volume)
             
             # Botones circulares (Controles, Sonido, Salir)
             for i, btn in enumerate(self.circular_buttons):
@@ -612,7 +649,7 @@ class Game:
                         self.sound_manager.play_menu_music(self.music_volume)
         
         # Manejar pantalla de victoria o game over
-        elif self.game_state in ["victory", "game_over"]:
+        elif self.game_state in ["victory", "lose"]:
             for event in events:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
@@ -1084,14 +1121,16 @@ class Game:
                 if len(self.enemies) == 0:
                     self.player_projectiles.clear()
                     
-                    if self.modo_infinito:
-                        # Regenerar en modo infinito
+                    if self.modo_infinito and self.infinite_mode:
+                        # Regenerar en modo infinito con dificultad escalable
+                        wave_config = self.infinite_mode.next_wave()
+                        self.level = wave_config["visual_level"]
                         self.level_intro_timer = 90
                         self.game_state = "level_intro"
-                        self.level_intro_text = f"WAVE {self.level + 1}"
-                        self.level += 1
-                        self.generate_enemies()
+                        self.generate_enemies_infinite(wave_config)
                         self.generate_space_objects()
+                        # Cambiar música si el nivel visual cambió
+                        self.sound_manager.change_level_music(self.level, self.music_volume)
                     else:
                         # Lógica normal de niveles
                         if self.level < 3:
@@ -1180,28 +1219,37 @@ class Game:
                     # Limpiar proyectiles restantes
                     self.player_projectiles.clear()
                     
-                    if self.modo_infinito:
-                        # Modo infinito: regenerar enemigos sin cambiar de nivel
-                        # Incrementar oleada y ciclar nivel para variar dificultad (1-3)
-                        self.oleada_infinita += 1
-                        self.level = (self.level % 3) + 1
-                        self.generate_enemies()
+                    if self.modo_infinito and self.infinite_mode:
+                        # Modo infinito: regenerar con dificultad escalable
+                        wave_config = self.infinite_mode.next_wave()
+                        self.level = wave_config["visual_level"]
+                        self.level_intro_timer = 90
+                        self.game_state = "level_intro"
+                        # Limpiar combo streak y efectos para evitar que ataquen en vacio
+                        self.combo_streak = 0
+                        self.combo_effects = []
+                        self.generate_enemies_infinite(wave_config)
                         self.generate_problem()
                         self.generate_space_objects()
+                        self.sound_manager.change_level_music(self.level, self.music_volume)
                     else:
                         # Modo normal: avanzar de nivel o ganar
                         if self.level < 3:
                             self.level += 1
                             self.game_state = "level_intro"
                             self.level_intro_timer = 180
+                            # Limpiar combo streak y efectos para evitar que ataquen en vacio
+                            self.combo_streak = 0
+                            self.combo_effects = []
                             self.generate_enemies()
                             self.generate_problem()
                             self.generate_space_objects()
                             # La música continúa, no se reinicia al pasar de nivel
                         else:
-                            self.game_state = "win"
+                            self.game_state = "victory"
                             # Detener música cuando se gana el juego
                             self.sound_manager.stop_background_music()
+                            self.sound_manager.play_sound('win', 1.0, self.sound_volume)
             
             # Eliminar proyectiles fuera de pantalla solo si no tienen objetivo válido
             if projectile in self.player_projectiles:
@@ -1507,7 +1555,7 @@ class Game:
         
         if self.modo_infinito:
             stats = [
-                ("Oleada", str(self.oleada_infinita), PURPLE),
+                ("Oleada", str(self.infinite_mode.wave if self.infinite_mode else 0), PURPLE),
                 ("Vidas", f"{self.player.lives}/5", GREEN),
                 ("Enemigos", f"{len(self.enemies)}", RED),
                 ("Puntaje", str(self.player.score), CYAN),
@@ -1734,33 +1782,46 @@ class Game:
         self.screen.blit(back_text, back_rect)
     
     def draw_background(self):
-        """Dibuja el fondo según el nivel actual"""
-        # Obtener dimensiones reales de la pantalla
+        """Dibuja el fondo con gradiente según el nivel actual"""
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
         
+        # Determinar qué nivel usar para el fondo
+        level_for_bg = self.level
         if self.game_state == "menu":
             level_for_bg = 1
-        elif self.game_state == "level_intro":
-            level_for_bg = self.level
-        elif self.game_state != "playing":
-            level_for_bg = self.level
-        else:
-            level_for_bg = self.level
-            
-        # Dibujar fondo base (espacio)
-        if level_for_bg == 1:
-            bg_color = BLACK
-        elif level_for_bg == 2:
-            bg_color = (10, 5, 20)  # Púrpura muy oscuro
-        else:
-            bg_color = (20, 5, 5)  # Rojizo muy oscuro
-            
-        self.screen.fill(bg_color)
         
-        # Dibujar estrellas (puntos random)
-        # Nota: Normalmente esto se haría una sola vez o usando una imagen
-        # pero para mantener el estilo simple actual, usamos los space_objects
+        # Seleccionar colores de gradiente según nivel
+        if level_for_bg == 1:
+            bg_start, bg_end = L1_BG_START, L1_BG_END
+            star_color = L1_STAR
+        elif level_for_bg == 2:
+            bg_start, bg_end = L2_BG_START, L2_BG_END
+            star_color = L2_STAR
+        else:
+            bg_start, bg_end = L3_BG_START, L3_BG_END
+            star_color = L3_STAR
+        
+        # Dibujar gradiente vertical
+        for y in range(screen_height):
+            progress = y / screen_height
+            r = int(bg_start[0] + (bg_end[0] - bg_start[0]) * progress)
+            g = int(bg_start[1] + (bg_end[1] - bg_start[1]) * progress)
+            b = int(bg_start[2] + (bg_end[2] - bg_start[2]) * progress)
+            pygame.draw.line(self.screen, (r, g, b), (0, y), (screen_width, y))
+        
+        # Dibujar estrellas con colores del nivel
+        for x, y, size, brightness in self.stars:
+            color = (
+                min(255, int(star_color[0] * brightness / 255)),
+                min(255, int(star_color[1] * brightness / 255)),
+                min(255, int(star_color[2] * brightness / 255))
+            )
+            pygame.draw.circle(self.screen, color, (x, y), size)
+            if size >= 2:
+                pygame.draw.circle(self.screen, WHITE, (x, y), 1)
+        
+        # Dibujar objetos espaciales
         for obj in self.space_objects:
             obj.draw(self.screen)
 
@@ -2355,9 +2416,17 @@ class Game:
         """Dibuja la introducción del nivel con pixel art"""
         
         # Si es modo infinito, mostrar pantalla especial
-        if self.modo_infinito:
-            # Título principal MODO INFINITO
-            main_title = "MODO INFINITO"
+        if self.modo_infinito and self.infinite_mode:
+            # Obtener información de la oleada actual
+            wave_num = self.infinite_mode.wave
+            difficulty = self.infinite_mode._get_difficulty_label()
+            wave_config = self.infinite_mode.get_current_config()
+            
+            # Título principal con número de oleada
+            if wave_num == 1:
+                main_title = "MODO INFINITO"
+            else:
+                main_title = f"WAVE {wave_num}"
             
             # Efecto pixel art con múltiples capas
             for i in range(5):
@@ -2383,25 +2452,26 @@ class Game:
                              title_rect.width + border_size * 2, title_rect.height + border_size * 2), 
                             border_size)
             
-            # Símbolo de infinito grande
-            infinity_text = self.font_large.render("∞", True, CYAN)
-            infinity_rect = infinity_text.get_rect(center=(SCREEN_WIDTH // 2, 260))
-            self.screen.blit(infinity_text, infinity_rect)
+            # Mostrar dificultad y estadísticas
+            diff_text = self.font_large.render(difficulty, True, CYAN)
+            diff_rect = diff_text.get_rect(center=(SCREEN_WIDTH // 2, 260))
+            self.screen.blit(diff_text, diff_rect)
             
-            # Descripción
-            desc_text = self.font_medium.render("Tiempo Adaptativo con IA", True, PINK)
-            desc_rect = desc_text.get_rect(center=(SCREEN_WIDTH // 2, 320))
-            self.screen.blit(desc_text, desc_rect)
+            # Info de la oleada
+            enemies_info = f"Enemigos: {wave_config['num_enemies']} | HP: {wave_config['enemy_hp']}"
+            info_text = self.font_medium.render(enemies_info, True, PINK)
+            info_rect = info_text.get_rect(center=(SCREEN_WIDTH // 2, 320))
+            self.screen.blit(info_text, info_rect)
             
-            # Tiempo predicho inicial
+            # Tiempo predicho
             if self.tiempo_adaptativo:
-                tiempo_info = f"Tiempo inicial: {self.tiempo_adaptativo.tiempo_actual:.1f}s"
+                tiempo_info = f"Tiempo: {self.tiempo_adaptativo.tiempo_actual:.1f}s (adaptativo)"
                 tiempo_text = self.font_small.render(tiempo_info, True, GOLD)
                 tiempo_rect = tiempo_text.get_rect(center=(SCREEN_WIDTH // 2, 360))
                 self.screen.blit(tiempo_text, tiempo_rect)
             
             # Instrucción adicional
-            hint_text = self.font_tiny.render("El tiempo se adapta a tu velocidad de respuesta", True, (180, 180, 180))
+            hint_text = self.font_tiny.render("¡Sobrevive el mayor tiempo posible!", True, (180, 180, 180))
             hint_rect = hint_text.get_rect(center=(SCREEN_WIDTH // 2, 400))
             self.screen.blit(hint_text, hint_rect)
         
@@ -2590,8 +2660,14 @@ class Game:
             
             # Dibujar menú de pausa
             self.draw_pause_menu()
+        elif self.game_state == "victory":
+            # Dibujar pantalla de victoria (completó nivel 3)
+            self.player.draw(self.screen)
+            for explosion in self.explosions:
+                explosion.draw(self.screen)
+            self.draw_victory_screen()
         else:
-            # Dibujar pantalla de fin de juego
+            # Dibujar pantalla de derrota (game over)
             self.player.draw(self.screen)
             for enemy in self.enemies:
                 enemy.draw(self.screen)

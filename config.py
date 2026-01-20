@@ -29,22 +29,22 @@ SILVER = (192, 192, 192)
 DARK_PURPLE = (100, 50, 150)
 STAR_COLOR = (200, 200, 255)
 
-# Colores para diferentes niveles
-# Colores para diferentes niveles
-# Nivel 1 - Espacio Profundo (Casi Negro/Azul)
-L1_BG_START = (0, 0, 5)       # Negro profundo
-L1_BG_END = (5, 5, 20)        # Azul medianoche muy oscuro
-L1_STAR = (150, 150, 180)     # Estrellas tenues
+# Colores para diferentes niveles - CONTRASTAN con enemigos
+# Nivel 1 - Espacio Profundo (Negro → Azul Marino) - Contrasta con enemigos AZULES/CYAN
+L1_BG_START = (0, 0, 8)        # Negro casi puro con tinte azul
+L1_BG_END = (8, 15, 40)        # Azul marino oscuro
+L1_STAR = (200, 220, 255)      # Estrellas blanco-azuladas
 
-# Nivel 2 - Vacío Cósmico (Casi Negro/Púrpura)
-L2_BG_START = (2, 0, 5)       # Negro con tinte índigo
-L2_BG_END = (10, 5, 20)       # Púrpura cósmico muy oscuro
-L2_STAR = (160, 140, 180)     # Estrellas violetas tenues
+# Nivel 2 - Nebulosa Teal (Teal profundo) - Contrasta con enemigos PÚRPURA/ROSA
+L2_BG_START = (0, 25, 30)      # Teal profundo
+L2_BG_END = (5, 50, 60)        # Cyan oscuro
+L2_STAR = (150, 255, 235)      # Estrellas turquesa brillantes
 
-# Nivel 3 - Materia Oscura (Casi Negro/Rojo)
-L3_BG_START = (5, 0, 0)       # Negro con tinte rojizo
-L3_BG_END = (20, 5, 5)        # Rojo óxido muy oscuro
-L3_STAR = (180, 140, 140)     # Estrellas rojizas tenues
+# Nivel 3 - Corredor Violeta (Azul profundo → Violeta) - Contrasta con enemigos ROJOS/NARANJA
+L3_BG_START = (20, 5, 35)      # Azul violáceo profundo
+L3_BG_END = (40, 10, 65)       # Violeta oscuro
+L3_STAR = (200, 170, 255)      # Estrellas violeta-blancas
+
 
 # Configuración de niveles
 LEVEL_CONFIG = {

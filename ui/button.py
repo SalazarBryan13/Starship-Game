@@ -53,10 +53,21 @@ class Button:
             pygame.draw.polygon(screen, color, points)
             
         elif self.icon == 'infinity':
-            # Símbolo de infinito (dos círculos)
-            radius = size // 3
-            pygame.draw.circle(screen, color, (x + radius, center_y), radius, 3)
-            pygame.draw.circle(screen, color, (x + size - radius, center_y), radius, 3)
+            # Flechas circulares (ciclo infinito) - muy visible
+            # Flecha circular grande
+            pygame.draw.arc(screen, color, (x + 2, y + 2, size - 4, size - 4), 0.5, 2.8, 3)
+            pygame.draw.arc(screen, color, (x + 2, y + 2, size - 4, size - 4), 3.6, 5.9, 3)
+            # Puntas de flecha
+            pygame.draw.polygon(screen, color, [
+                (x + size - 6, y + 8),
+                (x + size - 2, y + 12),
+                (x + size - 8, y + 14)
+            ])
+            pygame.draw.polygon(screen, color, [
+                (x + 6, y + size - 8),
+                (x + 2, y + size - 12),
+                (x + 8, y + size - 14)
+            ])
             
         elif self.icon == 'controls':
             # Gamepad simple con estilo neón
@@ -214,16 +225,16 @@ class CircularButton:
         icon_color = self.color if self.is_hovered else WHITE
         
         if self.icon_type == 'gamepad':
-            # Dibujar gamepad simple
-            # Cuerpo del control
-            body_rect = pygame.Rect(cx - size//2, cy - size//4, size, size//2)
-            pygame.draw.rect(screen, icon_color, body_rect, 2, border_radius=4)
-            # D-pad izquierdo
-            pygame.draw.line(screen, icon_color, (cx - size//3, cy - 2), (cx - size//3, cy + 2), 2)
-            pygame.draw.line(screen, icon_color, (cx - size//3 - 4, cy), (cx - size//3 + 4, cy), 2)
-            # Botones derechos
-            pygame.draw.circle(screen, icon_color, (cx + size//4, cy - 3), 3)
-            pygame.draw.circle(screen, icon_color, (cx + size//4 + 6, cy), 3)
+            # Tecla de teclado con "W" - representa WASD controles
+            # Rectángulo de tecla
+            key_size = int(size * 0.8)
+            key_rect = pygame.Rect(cx - key_size//2, cy - key_size//2, key_size, key_size)
+            pygame.draw.rect(screen, icon_color, key_rect, 2, border_radius=3)
+            # Letra "W" en el centro
+            font = pygame.font.Font(None, int(size * 0.7))
+            w_text = font.render("W", True, icon_color)
+            w_rect = w_text.get_rect(center=(cx, cy))
+            screen.blit(w_text, w_rect)
             
         elif self.icon_type == 'sound':
             # Dibujar speaker

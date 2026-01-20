@@ -58,13 +58,13 @@ class SpaceObject:
     
     def _draw_asteroid(self, screen):
         """Dibuja un asteroide"""
-        # Color según nivel
+        # Color según nivel - tonos que contrastan con el fondo
         if self.level == 1:
-            color = (100, 100, 120)
+            color = (120, 130, 150)  # Gris azulado para fondo oscuro
         elif self.level == 2:
-            color = (120, 80, 120)
+            color = (90, 140, 130)   # Gris verdoso para fondo teal
         else:
-            color = (120, 60, 60)
+            color = (150, 120, 160)  # Gris violáceo para fondo violeta
         
         # Dibujar asteroide irregular
         points = []
@@ -88,16 +88,16 @@ class SpaceObject:
     
     def _draw_planet(self, screen):
         """Dibuja un planeta"""
-        # Color según nivel
+        # Color según nivel - colores vibrantes que contrastan con fondo
         if self.level == 1:
-            base_color = (50, 100, 200)
-            band_color = (30, 80, 180)
+            base_color = (180, 140, 100)  # Marrón dorado (contrasta con azul marino)
+            band_color = (150, 110, 70)
         elif self.level == 2:
-            base_color = (150, 50, 150)
-            band_color = (120, 30, 120)
+            base_color = (200, 100, 80)   # Naranja coral (contrasta con teal)
+            band_color = (170, 70, 50)
         else:
-            base_color = (200, 50, 50)
-            band_color = (180, 30, 30)
+            base_color = (100, 200, 150)  # Verde esmeralda (contrasta con violeta)
+            band_color = (70, 170, 120)
         
         # Planeta principal
         pygame.draw.circle(screen, base_color, (int(self.x), int(self.y)), self.size)
@@ -117,13 +117,13 @@ class SpaceObject:
     
     def _draw_nebula(self, screen):
         """Dibuja una nebulosa"""
-        # Color según nivel
+        # Color según nivel - tonos suaves que complementan sin confundir
         if self.level == 1:
-            colors = [(50, 100, 200, 80), (100, 150, 255, 60)]
+            colors = [(180, 130, 80, 50), (220, 160, 100, 35)]   # Nebulosa dorada
         elif self.level == 2:
-            colors = [(150, 50, 200, 80), (200, 100, 255, 60)]
+            colors = [(220, 120, 80, 50), (255, 150, 100, 35)]   # Nebulosa coral
         else:
-            colors = [(200, 50, 50, 80), (255, 100, 100, 60)]
+            colors = [(80, 200, 150, 50), (120, 230, 180, 35)]   # Nebulosa esmeralda
         
         # Dibujar múltiples círculos superpuestos para efecto nebulosa
         for i, (r, g, b, alpha) in enumerate(colors):
@@ -144,13 +144,13 @@ class SpaceObject:
             (self.x - tail_length * 0.4, self.y - tail_length * 0.4)
         ]
         
-        # Color según nivel
+        # Color según nivel - colas brillantes que contrastan
         if self.level == 1:
-            tail_color = (150, 200, 255)
+            tail_color = (255, 220, 150)  # Dorado brillante
         elif self.level == 2:
-            tail_color = (200, 150, 255)
+            tail_color = (255, 180, 120)  # Naranja claro
         else:
-            tail_color = (255, 150, 150)
+            tail_color = (150, 255, 200)  # Verde menta brillante
         
         # Dibujar cola con gradiente
         for i in range(len(tail_points) - 1):
