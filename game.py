@@ -1608,14 +1608,24 @@ class Game:
             self.screen.blit(label_text, (15, stats_y + i * 22))
             self.screen.blit(value_text, (120, stats_y + i * 22))
         
-        # Vidas del jugador (corazones mejorados)
+        # Vidas del jugador (corazones mejorados) - Estilo igual al COMBO
         heart_size = 24
-        hearts_bg = pygame.Surface((140, 40), pygame.SRCALPHA)
-        hearts_bg.fill((0, 0, 0, 180))
-        self.screen.blit(hearts_bg, (SCREEN_WIDTH - 145, 5))
+        lives_panel_w = 180
+        lives_panel_h = 40
+        lives_panel = pygame.Surface((lives_panel_w, lives_panel_h), pygame.SRCALPHA)
+        
+        # Fondo con estilo igual al combo
+        pygame.draw.rect(lives_panel, (20, 40, 60, 180), (0, 0, lives_panel_w, lives_panel_h), border_radius=8)
+        pygame.draw.rect(lives_panel, CYAN, (0, 0, lives_panel_w, lives_panel_h), 2, border_radius=8)
+        
+        self.screen.blit(lives_panel, (SCREEN_WIDTH - 185, 5))
+        
+        # Etiqueta "VIDAS" al lado de los corazones
+        lives_label = self.font_tiny.render("VIDAS", True, WHITE)
+        self.screen.blit(lives_label, (SCREEN_WIDTH - 180, 12))
         
         for i in range(5):
-            x = SCREEN_WIDTH - 135 + i * 26
+            x = SCREEN_WIDTH - 125 + i * 26
             y = 25
             if i < self.player.lives:
                 # Corazón lleno con gradiente

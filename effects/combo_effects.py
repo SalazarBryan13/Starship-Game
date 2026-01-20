@@ -17,8 +17,9 @@ class ComboIndicator:
         self.combo_count = 0
         self.max_combo = 5
         self.pulse_timer = 0
-        self.x = SCREEN_WIDTH - 120
-        self.y = 150
+        # Posición a la izquierda de la barra de VIDAS (mismo Y, separado a la izquierda)
+        self.x = SCREEN_WIDTH - 375  # 185 (vidas) + 10 (separación) + 180 (ancho combo)
+        self.y = 5
         
     def update(self, combo_count):
         """Actualiza el estado del indicador"""
@@ -33,9 +34,9 @@ class ComboIndicator:
         # Pulso para dar vida al indicador
         pulse = (math.sin(self.pulse_timer * 0.15) + 1) / 2
         
-        # Panel de fondo
-        panel_w = 100
-        panel_h = 35
+        # Panel de fondo (mismo tamaño que barra de vidas: 180x40)
+        panel_w = 180
+        panel_h = 40
         panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         
         # Color del panel basado en progreso
@@ -52,25 +53,26 @@ class ComboIndicator:
         
         screen.blit(panel, (self.x, self.y))
         
-        # Texto "COMBO"
+        # Texto "COMBO" a la izquierda
         combo_text = font.render("COMBO", True, WHITE)
-        screen.blit(combo_text, (self.x + 10, self.y + 5))
+        screen.blit(combo_text, (self.x + 8, self.y + 12))
         
-        # Indicadores de progreso (5 círculos)
-        circle_y = self.y + 25
-        circle_start_x = self.x + 12
-        circle_spacing = 18
+        # Indicadores de progreso (5 círculos grandes) - tamaño similar a los corazones
+        circle_y = self.y + 20
+        circle_start_x = self.x + 60
+        circle_spacing = 24  # Más espaciado
+        circle_size = 10  # Tamaño más grande, similar a corazones
         
         for i in range(self.max_combo):
             cx = circle_start_x + i * circle_spacing
             if i < self.combo_count:
-                # Círculo lleno con glow
-                glow_size = 6 + int(pulse * 2) if i == self.combo_count - 1 else 6
+                # Círculo lleno con glow (tamaño grande como corazones)
+                glow_size = circle_size + 2 + int(pulse * 2) if i == self.combo_count - 1 else circle_size + 2
                 pygame.draw.circle(screen, GOLD, (cx, circle_y), glow_size)
-                pygame.draw.circle(screen, WHITE, (cx, circle_y), 4)
+                pygame.draw.circle(screen, WHITE, (cx, circle_y), circle_size - 2)
             else:
-                # Círculo vacío
-                pygame.draw.circle(screen, (60, 80, 100), (cx, circle_y), 5, 1)
+                # Círculo vacío (borde visible)
+                pygame.draw.circle(screen, (60, 80, 100), (cx, circle_y), circle_size, 2)
 
 
 class ComboShockwave:

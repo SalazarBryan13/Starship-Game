@@ -603,11 +603,61 @@ class MascotaAnimada:
         
         screen.blit(bg_surface, (center_x - bg_width // 2, indicator_y))
         
-        # Texto
-        streak_text = f"🔥 x{self.streak}"
+        # Dibujar icono de fuego manualmente (no se puede usar emoji)
+        fire_x = center_x - 25
+        fire_y = indicator_y + bg_height // 2
+        self._draw_fire_icon(screen, fire_x, fire_y)
+        
+        # Texto (solo el número)
+        streak_text = f"x{self.streak}"
         text_surface = self.font_streak.render(streak_text, True, WHITE)
-        text_rect = text_surface.get_rect(center=(center_x, indicator_y + bg_height // 2))
+        text_rect = text_surface.get_rect(center=(center_x + 8, indicator_y + bg_height // 2))
         screen.blit(text_surface, text_rect)
+    
+    def _draw_fire_icon(self, screen, x, y):
+        """Dibuja un icono de fuego animado"""
+        # Animación suave
+        time_offset = pygame.time.get_ticks() * 0.008
+        flicker = math.sin(time_offset) * 2
+        
+        # Llama exterior (naranja/rojo)
+        outer_points = [
+            (x, y + 8),  # Parte inferior
+            (x - 5, y + 3),
+            (x - 6, y - 2),
+            (x - 4, y - 6 + flicker),
+            (x - 2, y - 9 + flicker),
+            (x, y - 11 + flicker),  # Punta
+            (x + 2, y - 9 + flicker),
+            (x + 4, y - 6 + flicker),
+            (x + 6, y - 2),
+            (x + 5, y + 3),
+        ]
+        pygame.draw.polygon(screen, (255, 100, 0), outer_points)  # Naranja
+        
+        # Llama intermedia (naranja más claro)
+        mid_points = [
+            (x, y + 5),
+            (x - 3, y + 1),
+            (x - 4, y - 3),
+            (x - 2, y - 6 + flicker),
+            (x, y - 8 + flicker),
+            (x + 2, y - 6 + flicker),
+            (x + 4, y - 3),
+            (x + 3, y + 1),
+        ]
+        pygame.draw.polygon(screen, (255, 150, 50), mid_points)  # Naranja claro
+        
+        # Llama interior (amarillo)
+        inner_points = [
+            (x, y + 3),
+            (x - 2, y),
+            (x - 2, y - 3),
+            (x, y - 5 + flicker),
+            (x + 2, y - 3),
+            (x + 2, y),
+        ]
+        pygame.draw.polygon(screen, (255, 220, 100), inner_points)  # Amarillo
     
     def _draw_message(self, screen, x, y):
         if not self.current_message:
