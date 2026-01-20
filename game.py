@@ -101,6 +101,10 @@ class Game:
                 random.randint(50, 255)  # brillo
             ))
         
+        # === OPTIMIZACIÓN: Cache de fondos prerenderizados ===
+        self.cached_backgrounds = {}
+        self._cache_all_backgrounds()
+        
         # Objetos espaciales decorativos
         self.space_objects = []
         
@@ -435,11 +439,12 @@ class Game:
             self.enemies.append(enemy)
     
     def generate_space_objects(self):
-        """Genera objetos espaciales decorativos según el nivel"""
+        """Genera objetos espaciales decorativos según el nivel (OPTIMIZADO)"""
         self.space_objects = []
         
-        # Asteroides
-        for _ in range(5 if self.level == 1 else 8 if self.level == 2 else 10):
+        # Asteroides (reducido en nivel 3 para mejor rendimiento)
+        asteroid_counts = {1: 5, 2: 6, 3: 6}  # Era 5, 8, 10
+        for _ in range(asteroid_counts.get(self.level, 5)):
             self.space_objects.append(SpaceObject(
                 'asteroid',
                 random.randint(0, SCREEN_WIDTH),
@@ -456,9 +461,10 @@ class Game:
                 self.level
             ))
         
-        # Nebulosas (solo nivel 2 y 3)
+        # Nebulosas (solo nivel 2 y 3, reducido)
         if self.level >= 2:
-            for _ in range(3):
+            nebula_count = 2 if self.level == 3 else 3  # Reducido en nivel 3
+            for _ in range(nebula_count):
                 self.space_objects.append(SpaceObject(
                     'nebula',
                     random.randint(0, SCREEN_WIDTH),
@@ -466,9 +472,9 @@ class Game:
                     self.level
                 ))
         
-        # Cometas (solo nivel 3)
+        # Cometas (solo nivel 3, reducido a 1)
         if self.level == 3:
-            for _ in range(2):
+            for _ in range(1):  # Reducido de 2 a 1
                 self.space_objects.append(SpaceObject(
                     'comet',
                     random.randint(0, SCREEN_WIDTH),
@@ -1805,47 +1811,53 @@ class Game:
         
         self.screen.blit(back_text, back_rect)
     
-    def draw_background(self):
-        """Dibuja el fondo con gradiente según el nivel actual"""
-        screen_width = self.screen.get_width()
-        screen_height = self.screen.get_height()
+    def _cache_all_backgrounds(self):
+        """Prerenderiza los fondos de todos los niveles para mejor rendimiento"""
+        level_configs = {
+            1: (L1_BG_START, L1_BG_END, L1_STAR),
+            2: (L2_BG_START, L2_BG_END, L2_STAR),
+            3: (L3_BG_START, L3_BG_END, L3_STAR),
+        }
         
+        for level, (bg_start, bg_end, star_color) in level_configs.items():
+            # Crear surface para este nivel
+            bg_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            
+            # Dibujar gradiente vertical (solo una vez)
+            for y in range(SCREEN_HEIGHT):
+                progress = y / SCREEN_HEIGHT
+                r = int(bg_start[0] + (bg_end[0] - bg_start[0]) * progress)
+                g = int(bg_start[1] + (bg_end[1] - bg_start[1]) * progress)
+                b = int(bg_start[2] + (bg_end[2] - bg_start[2]) * progress)
+                pygame.draw.line(bg_surface, (r, g, b), (0, y), (SCREEN_WIDTH, y))
+            
+            # Dibujar estrellas con colores del nivel
+            for x, y, size, brightness in self.stars:
+                color = (
+                    min(255, int(star_color[0] * brightness / 255)),
+                    min(255, int(star_color[1] * brightness / 255)),
+                    min(255, int(star_color[2] * brightness / 255))
+                )
+                pygame.draw.circle(bg_surface, color, (x, y), size)
+                if size >= 2:
+                    pygame.draw.circle(bg_surface, WHITE, (x, y), 1)
+            
+            self.cached_backgrounds[level] = bg_surface
+        
+        print("✓ Fondos cacheados para optimización de rendimiento")
+    
+    def draw_background(self):
+        """Dibuja el fondo usando cache prerenderizado (OPTIMIZADO)"""
         # Determinar qué nivel usar para el fondo
         level_for_bg = self.level
         if self.game_state == "menu":
             level_for_bg = 1
         
-        # Seleccionar colores de gradiente según nivel
-        if level_for_bg == 1:
-            bg_start, bg_end = L1_BG_START, L1_BG_END
-            star_color = L1_STAR
-        elif level_for_bg == 2:
-            bg_start, bg_end = L2_BG_START, L2_BG_END
-            star_color = L2_STAR
-        else:
-            bg_start, bg_end = L3_BG_START, L3_BG_END
-            star_color = L3_STAR
+        # Usar fondo cacheado (mucho más rápido)
+        if level_for_bg in self.cached_backgrounds:
+            self.screen.blit(self.cached_backgrounds[level_for_bg], (0, 0))
         
-        # Dibujar gradiente vertical
-        for y in range(screen_height):
-            progress = y / screen_height
-            r = int(bg_start[0] + (bg_end[0] - bg_start[0]) * progress)
-            g = int(bg_start[1] + (bg_end[1] - bg_start[1]) * progress)
-            b = int(bg_start[2] + (bg_end[2] - bg_start[2]) * progress)
-            pygame.draw.line(self.screen, (r, g, b), (0, y), (screen_width, y))
-        
-        # Dibujar estrellas con colores del nivel
-        for x, y, size, brightness in self.stars:
-            color = (
-                min(255, int(star_color[0] * brightness / 255)),
-                min(255, int(star_color[1] * brightness / 255)),
-                min(255, int(star_color[2] * brightness / 255))
-            )
-            pygame.draw.circle(self.screen, color, (x, y), size)
-            if size >= 2:
-                pygame.draw.circle(self.screen, WHITE, (x, y), 1)
-        
-        # Dibujar objetos espaciales
+        # Dibujar objetos espaciales (estos sí se mueven)
         for obj in self.space_objects:
             obj.draw(self.screen)
 

@@ -244,7 +244,8 @@ class MascotaAnimada:
         self.celebrate_duration = 90
         self.mega_celebrate_duration = 150
         
-        # Efectos visuales
+        # Efectos visuales - OPTIMIZADO con límite de partículas
+        self.MAX_PARTICLES = 80  # Límite para evitar spikes de rendimiento
         self.particles = []
         self.achievements = []  # Lista de popups de logros
         self.glow_intensity = 0
@@ -297,34 +298,31 @@ class MascotaAnimada:
             self.state_timer = self.mega_celebrate_duration
             self.glow_intensity = 1.0
             
-            # Mega explosión de partículas
-            for _ in range(40):
-                particle = CelebrationParticle(
+            # Mega explosión de partículas (OPTIMIZADO - reducido)
+            for _ in range(25):  # Reducido de 40
+                self._add_particle(CelebrationParticle(
                     self.x + self.width // 2,
                     self.y + self.height // 3,
                     intensity=1.5
-                )
-                self.particles.append(particle)
+                ))
             
-            # Partículas desde el centro de la pantalla
-            for _ in range(30):
-                particle = CelebrationParticle(
+            # Partículas desde el centro de la pantalla (OPTIMIZADO - reducido)
+            for _ in range(20):  # Reducido de 30
+                self._add_particle(CelebrationParticle(
                     SCREEN_WIDTH // 2 + random.randint(-50, 50),
                     SCREEN_HEIGHT // 3,
                     intensity=2.0
-                )
-                self.particles.append(particle)
+                ))
         else:
-            # Celebración normal
+            # Celebración normal (OPTIMIZADO - reducido)
             self.state = self.STATE_CELEBRATE
             self.state_timer = self.celebrate_duration
             
-            for _ in range(20):
-                particle = CelebrationParticle(
+            for _ in range(12):  # Reducido de 20
+                self._add_particle(CelebrationParticle(
                     self.x + self.width // 2,
                     self.y + self.height // 3
-                )
-                self.particles.append(particle)
+                ))
         
         self.celebrate_jump = 0
         self.celebrate_arms = 0
@@ -342,6 +340,11 @@ class MascotaAnimada:
     def reset_streak(self):
         """Reinicia la racha (cuando falla una respuesta)"""
         self.streak = 0
+    
+    def _add_particle(self, particle):
+        """Añade una partícula respetando el límite máximo (OPTIMIZACIÓN)"""
+        if len(self.particles) < self.MAX_PARTICLES:
+            self.particles.append(particle)
     
     def update(self):
         """Actualiza animaciones"""
@@ -393,12 +396,11 @@ class MascotaAnimada:
         self.celebrate_jump = -40 * math.sin(progress * math.pi)
         self.celebrate_arms = 35 * math.sin(progress * math.pi * 4)
         
-        if random.random() < 0.35:
-            particle = CelebrationParticle(
+        if random.random() < 0.25:  # Reducido de 0.35
+            self._add_particle(CelebrationParticle(
                 self.x + self.width // 2 + random.randint(-30, 30),
                 self.y + self.celebrate_jump + random.randint(-15, 15)
-            )
-            self.particles.append(particle)
+            ))
         
         if self.state_timer <= 0:
             self.state = self.STATE_IDLE
@@ -413,14 +415,13 @@ class MascotaAnimada:
         self.celebrate_jump = -60 * math.sin(progress * math.pi * 1.5)
         self.celebrate_arms = 45 * math.sin(progress * math.pi * 6)
         
-        # Más partículas
-        if random.random() < 0.5:
-            particle = CelebrationParticle(
+        # Más partículas (OPTIMIZADO - reducida probabilidad)
+        if random.random() < 0.35:  # Reducido de 0.5
+            self._add_particle(CelebrationParticle(
                 self.x + self.width // 2 + random.randint(-40, 40),
                 self.y + self.celebrate_jump + random.randint(-20, 20),
                 intensity=1.3
-            )
-            self.particles.append(particle)
+            ))
         
         if self.state_timer <= 0:
             self.state = self.STATE_IDLE

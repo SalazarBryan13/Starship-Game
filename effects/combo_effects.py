@@ -157,80 +157,52 @@ class LightningBolt:
             self.beam_width = self.max_beam_width * (progress / 0.2)
         
     def draw(self, screen):
-        """Dibuja el rayo de energía con efecto de flujo brillante"""
+        """Dibuja el rayo de energía (OPTIMIZADO - sin Surface de pantalla completa)"""
         if self.life <= 0 or self.beam_width <= 0:
             return
         
-        alpha = min(255, int(255 * (self.life / self.max_life) * 1.5))
+        alpha_factor = min(1.0, (self.life / self.max_life) * 1.5)
         pulse = (math.sin(self.pulse_timer * 0.5) + 1) / 2
         
-        # Crear superficie para el rayo
-        beam_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        
-        # Calcular ángulo y longitud del rayo
+        # Calcular dirección del rayo
         dx = self.end_x - self.start_x
         dy = self.end_y - self.start_y
         length = math.sqrt(dx*dx + dy*dy)
         
         if length == 0:
             return
-            
-        # Vector normalizado
-        nx = dx / length
-        ny = dy / length
         
-        # Vector perpendicular para el grosor
-        px = -ny
-        py = nx
+        # OPTIMIZADO: Dibujar directamente en screen con líneas gruesas
+        # En lugar de crear Surface de pantalla completa
         
-        # Dibujar múltiples capas del rayo para efecto de glow
-        layers = [
-            (self.beam_width * 1.5, (255, 200, 50, alpha // 6)),      # Glow externo amarillo
-            (self.beam_width * 1.2, (255, 220, 100, alpha // 4)),     # Glow medio
-            (self.beam_width * 0.9, (255, 240, 150, alpha // 2)),     # Glow interno
-            (self.beam_width * 0.6, (255, 255, 200, int(alpha * 0.8))),  # Core brillante
-            (self.beam_width * 0.3, (255, 255, 255, alpha)),          # Núcleo blanco
+        # Colores para las capas (sin alpha, ya que dibujamos directo)
+        base_color = (255, 230, 100)  # Amarillo dorado
+        core_color = (255, 255, 220)  # Blanco amarillento
+        
+        # Dibujar capas de líneas (de mayor a menor grosor)
+        line_widths = [
+            (int(self.beam_width * 1.2), (255, 200, 50)),    # Glow externo
+            (int(self.beam_width * 0.8), (255, 230, 100)),   # Glow medio
+            (int(self.beam_width * 0.5), (255, 255, 180)),   # Core
+            (int(self.beam_width * 0.2), (255, 255, 255)),   # Núcleo
         ]
         
-        for width, color in layers:
+        start_pos = (int(self.start_x), int(self.start_y))
+        end_pos = (int(self.end_x), int(self.end_y))
+        
+        for width, color in line_widths:
             if width > 0:
-                hw = width / 2
-                points = [
-                    (self.start_x + px * hw, self.start_y + py * hw),
-                    (self.start_x - px * hw, self.start_y - py * hw),
-                    (self.end_x - px * hw, self.end_y - py * hw),
-                    (self.end_x + px * hw, self.end_y + py * hw),
-                ]
-                pygame.draw.polygon(beam_surface, color, points)
+                pygame.draw.line(screen, color, start_pos, end_pos, max(1, width))
         
-        # Añadir partículas a lo largo del rayo
-        num_particles = 8
-        for i in range(num_particles):
-            t = (i + self.pulse_timer * 0.1) % 1.0
-            particle_x = self.start_x + dx * t + random.randint(-5, 5)
-            particle_y = self.start_y + dy * t + random.randint(-5, 5)
-            particle_size = random.randint(2, 5)
-            particle_alpha = int(alpha * (1 - abs(t - 0.5) * 2))
-            if particle_alpha > 0:
-                pygame.draw.circle(beam_surface, (255, 255, 255, particle_alpha), 
-                                 (int(particle_x), int(particle_y)), particle_size)
-        
-        # Brillo en el punto de impacto (más grande y brillante)
-        impact_pulse = (math.sin(self.pulse_timer * 0.8) + 1) / 2
-        impact_size = int(15 + 10 * impact_pulse)
-        
-        # Múltiples capas de brillo en el impacto
-        for i in range(4):
-            size = impact_size + (3 - i) * 8
-            impact_alpha = max(0, alpha // (i + 1))
-            pygame.draw.circle(beam_surface, (255, 255, 200, impact_alpha), 
-                             (int(self.end_x), int(self.end_y)), size)
+        # Brillo en el punto de impacto (simplificado)
+        impact_size = int(12 + 8 * pulse)
+        pygame.draw.circle(screen, (255, 255, 200), end_pos, impact_size)
+        pygame.draw.circle(screen, (255, 255, 255), end_pos, impact_size // 2)
         
         # Brillo en el origen
-        pygame.draw.circle(beam_surface, (255, 255, 150, alpha // 2), 
-                          (int(self.start_x), int(self.start_y)), int(12 + 5 * pulse))
-        
-        screen.blit(beam_surface, (0, 0))
+        origin_size = int(8 + 4 * pulse)
+        pygame.draw.circle(screen, (255, 255, 150), start_pos, origin_size)
+        pygame.draw.circle(screen, (255, 255, 255), start_pos, origin_size // 2)
         
     def is_dead(self):
         return self.life <= 0

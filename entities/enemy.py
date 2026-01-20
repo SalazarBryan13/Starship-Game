@@ -14,6 +14,16 @@ from config import (
 class Enemy:
     """Clase para el enemigo con diferentes diseños según el nivel"""
     
+    # === OPTIMIZACIÓN: Cache de fuente a nivel de clase ===
+    _hp_font = None
+    
+    @classmethod
+    def _get_hp_font(cls):
+        """Obtiene la fuente cacheada para HP (crea solo una vez)"""
+        if cls._hp_font is None:
+            cls._hp_font = pygame.font.Font(None, 16)
+        return cls._hp_font
+    
     def __init__(self, x, y, hp, speed, level=1):
         self.x = x
         self.y = y
@@ -64,8 +74,7 @@ class Enemy:
         
         pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
         
-        font = pygame.font.Font(None, 16)
-        hp_text = font.render(f"{self.hp}/{self.max_hp}", True, WHITE)
+        hp_text = self._get_hp_font().render(f"{self.hp}/{self.max_hp}", True, WHITE)
         hp_text_rect = hp_text.get_rect(center=(center_x, self.y - 28))
         screen.blit(hp_text, hp_text_rect)
         
@@ -118,8 +127,7 @@ class Enemy:
         
         pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
         
-        font = pygame.font.Font(None, 16)
-        hp_text = font.render(f"{self.hp}/{self.max_hp}", True, WHITE)
+        hp_text = self._get_hp_font().render(f"{self.hp}/{self.max_hp}", True, WHITE)
         hp_text_rect = hp_text.get_rect(center=(center_x, self.y - 28))
         screen.blit(hp_text, hp_text_rect)
         
@@ -217,8 +225,7 @@ class Enemy:
         
         pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
         
-        font = pygame.font.Font(None, 16)
-        hp_text = font.render(f"{self.hp}/{self.max_hp}", True, WHITE)
+        hp_text = self._get_hp_font().render(f"{self.hp}/{self.max_hp}", True, WHITE)
         hp_text_rect = hp_text.get_rect(center=(center_x, self.y - 28))
         screen.blit(hp_text, hp_text_rect)
         

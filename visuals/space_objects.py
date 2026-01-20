@@ -29,6 +29,10 @@ class SpaceObject:
         else:
             self.vx = random.uniform(-0.5, 0.5)
             self.vy = random.uniform(0.2, 1)
+        
+        # === OPTIMIZACIÓN: Precalcular puntos de asteroide ===
+        if obj_type == 'asteroid':
+            self._precalculate_asteroid_shape()
     
     def update(self):
         """Actualiza la posición del objeto"""
@@ -56,8 +60,24 @@ class SpaceObject:
         elif self.type == 'comet':
             self._draw_comet(screen)
     
+    def _precalculate_asteroid_shape(self):
+        """Precalcula los puntos irregulares del asteroide (solo una vez)"""
+        self._asteroid_radii = []
+        num_points = 8
+        for i in range(num_points):
+            # Radio con variación aleatoria fija
+            radius = self.size // 2 + random.randint(-5, 5)
+            self._asteroid_radii.append(radius)
+        
+        # Precalcular posiciones de cráteres (relativas al centro)
+        self._crater_offsets = []
+        for _ in range(2):
+            offset_x = random.randint(-self.size//3, self.size//3)
+            offset_y = random.randint(-self.size//3, self.size//3)
+            self._crater_offsets.append((offset_x, offset_y))
+    
     def _draw_asteroid(self, screen):
-        """Dibuja un asteroide"""
+        """Dibuja un asteroide (OPTIMIZADO - usa puntos precalculados)"""
         # Color según nivel - tonos que contrastan con el fondo
         if self.level == 1:
             color = (120, 130, 150)  # Gris azulado para fondo oscuro
@@ -66,25 +86,24 @@ class SpaceObject:
         else:
             color = (150, 120, 160)  # Gris violáceo para fondo violeta
         
-        # Dibujar asteroide irregular
+        # Dibujar asteroide usando radios precalculados
         points = []
         num_points = 8
         for i in range(num_points):
             angle = (2 * math.pi / num_points) * i + math.radians(self.rotation)
-            radius_variation = self.size // 2 + random.randint(-5, 5)
-            px = self.x + math.cos(angle) * radius_variation
-            py = self.y + math.sin(angle) * radius_variation
+            radius = self._asteroid_radii[i]
+            px = self.x + math.cos(angle) * radius
+            py = self.y + math.sin(angle) * radius
             points.append((px, py))
         
         pygame.draw.polygon(screen, color, points)
         pygame.draw.polygon(screen, (color[0] + 30, color[1] + 30, color[2] + 30), points, 2)
         
-        # Cráteres
-        for _ in range(2):
-            crater_x = self.x + random.randint(-self.size//3, self.size//3)
-            crater_y = self.y + random.randint(-self.size//3, self.size//3)
-            pygame.draw.circle(screen, (color[0] - 20, color[1] - 20, color[2] - 20), 
-                             (int(crater_x), int(crater_y)), 3)
+        # Cráteres con posiciones precalculadas
+        crater_color = (max(0, color[0] - 20), max(0, color[1] - 20), max(0, color[2] - 20))
+        for offset_x, offset_y in self._crater_offsets:
+            pygame.draw.circle(screen, crater_color, 
+                             (int(self.x + offset_x), int(self.y + offset_y)), 3)
     
     def _draw_planet(self, screen):
         """Dibuja un planeta"""
@@ -134,7 +153,7 @@ class SpaceObject:
             screen.blit(nebula_surface, (self.x - self.size, self.y - self.size))
     
     def _draw_comet(self, screen):
-        """Dibuja un cometa"""
+        """Dibuja un cometa (OPTIMIZADO - sin Surfaces de pantalla completa)"""
         # Cola del cometa
         tail_length = self.size * 2
         tail_points = [
@@ -152,14 +171,14 @@ class SpaceObject:
         else:
             tail_color = (150, 255, 200)  # Verde menta brillante
         
-        # Dibujar cola con gradiente
+        # OPTIMIZADO: Dibujar cola directamente en screen (sin crear Surfaces gigantes)
         for i in range(len(tail_points) - 1):
-            alpha = int(150 * (1 - i / len(tail_points)))
-            tail_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            pygame.draw.line(tail_surface, (*tail_color, alpha), 
-                           tail_points[i], tail_points[i + 1], 3)
-            screen.blit(tail_surface, (0, 0))
+            # Usar grosor variable para simular desvanecimiento
+            thickness = max(1, 4 - i)
+            pygame.draw.line(screen, tail_color, 
+                           tail_points[i], tail_points[i + 1], thickness)
         
-        # Núcleo del cometa
+        # Núcleo del cometa con glow simple
+        pygame.draw.circle(screen, tail_color, (int(self.x), int(self.y)), self.size // 3 + 2)
         pygame.draw.circle(screen, WHITE, (int(self.x), int(self.y)), self.size // 3)
         pygame.draw.circle(screen, tail_color, (int(self.x), int(self.y)), self.size // 4)
