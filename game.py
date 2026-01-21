@@ -576,8 +576,22 @@ class Game:
                         # La música continúa desde el nivel anterior, no se reinicia
                     continue
                 
-                # Tecla R para reiniciar
+                # Tecla R para reiniciar el juego
                 if event.key == pygame.K_r and self.game_state in ["victory", "lose"]:
+                    # Detener el sonido final antes de reiniciar
+                    self.sound_manager.stop_final_sound()
+                    # Reiniciar juego
+                    self.modo_infinito = False
+                    self.tiempo_adaptativo = None
+                    self.reset_game()
+                    self.game_state = "level_intro"
+                    self.level_intro_timer = 180
+                    self.sound_manager.change_level_music(self.level, self.music_volume)
+                    self.paused = False
+                    continue
+                
+                # Tecla ESC o ENTER para volver al menú
+                if event.key in [pygame.K_ESCAPE, pygame.K_RETURN] and self.game_state in ["victory", "lose"]:
                     # Detener el sonido final antes de volver al menú
                     self.sound_manager.stop_final_sound()
                     self.game_state = "menu"
@@ -670,27 +684,6 @@ class Game:
                         self.sound_manager.change_level_music(1, self.music_volume) # Reiniciar música
                         self.sound_manager.play_menu_music(self.music_volume)
         
-        # Manejar pantalla de victoria o game over
-        elif self.game_state in ["victory", "lose"]:
-            for event in events:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_r:
-                        # Detener el sonido final antes de reiniciar o volver al menú
-                        self.sound_manager.stop_final_sound()
-                        # Reiniciar juego
-                        self.reset_game()
-                        # Si era victoria y reinicia, el nivel vuelve a 1
-                        self.game_state = "level_intro"
-                        self.level_intro_timer = 180
-                        self.sound_manager.change_level_music(self.level, self.music_volume)
-                    elif event.key == pygame.K_ESCAPE or event.key == pygame.K_RETURN:
-                        # Detener el sonido final antes de volver al menú
-                        self.sound_manager.stop_final_sound()
-                        # Volver al menú
-                        self.game_state = "menu"
-                        self.sound_manager.play_menu_music(self.music_volume)
-
-                        self.paused = False
     
     def process_answer(self, operation):
         """Procesa la respuesta del jugador"""
