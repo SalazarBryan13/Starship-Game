@@ -213,9 +213,16 @@ class MascotaAnimada:
         ("¡LEGENDARIO x10!", 250),
     ]
     
+    MENSAJES_ERROR = [
+        "¡Casi!", "¡Tú puedes!", "¡No te rindas!",
+        "¡Ánimo!", "¡La próxima!", "¡Concéntrate!",
+        "¡Incorrecto!", "¡Tranquilo!"
+    ]
+    
     STATE_IDLE = 'idle'
     STATE_CELEBRATE = 'celebrate'
     STATE_MEGA_CELEBRATE = 'mega_celebrate'
+    STATE_SAD = 'sad'
     
     def __init__(self, x=None, y=None):
         # Posición (esquina inferior derecha) - ROBOT MÁS GRANDE
@@ -254,6 +261,7 @@ class MascotaAnimada:
         self.current_message = ""
         self.message_timer = 0
         self.message_index = 0
+        self.error_message = False  # Flag para mensajes de error (color diferente)
         
         # Colores (más vibrantes)
         self.body_color = (35, 70, 110)
@@ -334,12 +342,28 @@ class MascotaAnimada:
         self.message_index = new_index
         self.current_message = self.MENSAJES_CELEBRACION[self.message_index]
         self.message_timer = 120
+        self.error_message = False  # Resetear flag de error para mostrar en dorado
         
         return bonus  # Retorna puntos bonus para añadir al score
     
     def reset_streak(self):
-        """Reinicia la racha (cuando falla una respuesta)"""
+        """Reinicia la racha (cuando falla una respuesta) y muestra mensaje de ánimo"""
         self.streak = 0
+        self.mostrar_error()
+    
+    def mostrar_error(self):
+        """Muestra un mensaje amigable de ánimo cuando el jugador se equivoca"""
+        self.state = self.STATE_SAD
+        self.state_timer = 90  # 1.5 segundos
+        
+        # Seleccionar mensaje aleatorio diferente al anterior
+        new_index = self.message_index
+        while new_index == self.message_index and len(self.MENSAJES_ERROR) > 1:
+            new_index = random.randint(0, len(self.MENSAJES_ERROR) - 1)
+        self.message_index = new_index
+        self.current_message = self.MENSAJES_ERROR[self.message_index]
+        self.message_timer = 90
+        self.error_message = True  # Flag para cambiar color del mensaje
     
     def _add_particle(self, particle):
         """Añade una partícula respetando el límite máximo (OPTIMIZACIÓN)"""
@@ -354,6 +378,8 @@ class MascotaAnimada:
             self._update_celebrate()
         elif self.state == self.STATE_MEGA_CELEBRATE:
             self._update_mega_celebrate()
+        elif self.state == self.STATE_SAD:
+            self._update_sad()
         
         # Glow decay
         if self.glow_intensity > 0:
@@ -427,6 +453,21 @@ class MascotaAnimada:
             self.state = self.STATE_IDLE
             self.celebrate_jump = 0
             self.celebrate_arms = 0
+    
+    def _update_sad(self):
+        """Animación cuando el jugador se equivoca - robot se ve preocupado"""
+        self.state_timer -= 1
+        progress = 1 - (self.state_timer / 90)
+        
+        # Movimiento ligero hacia abajo (cabizbajo)
+        self.celebrate_jump = 5 * math.sin(progress * math.pi)
+        # Brazos caídos
+        self.celebrate_arms = 0
+        
+        if self.state_timer <= 0:
+            self.state = self.STATE_IDLE
+            self.celebrate_jump = 0
+            self.error_message = False
     
     def draw(self, screen):
         """Dibuja robot, partículas, logros y racha"""
@@ -673,7 +714,15 @@ class MascotaAnimada:
         else:
             scale = 1.0
         
-        text_surface = self.font.render(self.current_message, True, GOLD)
+        # Color diferente para mensajes de error (rojo) vs celebración (dorado)
+        if self.error_message:
+            text_color = (255, 80, 80)  # Rojo
+            border_color = (255, 80, 80)
+        else:
+            text_color = GOLD
+            border_color = GOLD
+        
+        text_surface = self.font.render(self.current_message, True, text_color)
         
         if scale != 1.0:
             new_width = int(text_surface.get_width() * scale)
@@ -689,7 +738,7 @@ class MascotaAnimada:
         bubble_surface = pygame.Surface((bubble_width, bubble_height), pygame.SRCALPHA)
         pygame.draw.rect(bubble_surface, (20, 40, 60, 220), 
                         (0, 0, bubble_width, bubble_height), border_radius=12)
-        pygame.draw.rect(bubble_surface, GOLD, 
+        pygame.draw.rect(bubble_surface, border_color, 
                         (0, 0, bubble_width, bubble_height), 3, border_radius=12)
         screen.blit(bubble_surface, bubble_rect)
         

@@ -120,6 +120,11 @@ class Game:
         self.screen_shake_intensity = 0 # Intensidad del shake
         self.screen_flash = 0           # Duración del flash de pantalla
         
+        # Sistema de feedback visual de borde (correcto/incorrecto)
+        self.answer_feedback_timer = 0      # Duración del efecto de borde
+        self.answer_feedback_color = None   # Color del borde (GREEN o RED)
+        self.answer_feedback_max = 45       # Tiempo máximo del efecto (0.75 segundos)
+        
         # Partículas del menú para animación dinámica - MÁS IMPACTANTE
         self.menu_particles = []
         # Estrellas fugaces - MUCHAS MÁS
@@ -379,6 +384,10 @@ class Game:
         
         # Resetear sistema de combo
         self.combo_streak = 0
+        
+        # Resetear feedback visual de borde
+        self.answer_feedback_timer = 0
+        self.answer_feedback_color = None
         self.combo_effects = []
         
         # Mascota animada (robot que da ánimos)
@@ -657,6 +666,7 @@ class Game:
                         self._sync_sliders()
                     elif i == 3:  # Salir al Menú
                         self.game_state = "menu"
+                        self.paused = False  # IMPORTANTE: resetear flag de pausa
                         self.sound_manager.change_level_music(1, self.music_volume) # Reiniciar música
                         self.sound_manager.play_menu_music(self.music_volume)
         
@@ -710,6 +720,10 @@ class Game:
             self.feedback_color = GREEN
             self.sound_manager.play_sound('correct', 0.3, self.sound_volume)
             
+            # Activar efecto de borde VERDE (correcto)
+            self.answer_feedback_timer = self.answer_feedback_max
+            self.answer_feedback_color = GREEN
+            
             # Incrementar combo streak
             self.combo_streak += 1
             self.combo_indicator.update(self.combo_streak)
@@ -755,6 +769,10 @@ class Game:
             self.feedback_timer = 60
             self.feedback_color = RED
             self.sound_manager.play_sound('wrong', 0.3, self.sound_volume)
+            
+            # Activar efecto de borde ROJO (incorrecto)
+            self.answer_feedback_timer = self.answer_feedback_max
+            self.answer_feedback_color = RED
             
             # RESETEAR COMBO
             self.combo_streak = 0
@@ -815,8 +833,8 @@ class Game:
         particles = ComboParticleBurst(player_center_x, player_center_y)
         self.combo_effects.append(particles)
         
-        # 3. Texto de combo
-        text_y = SCREEN_HEIGHT // 2 - 50
+        # 3. Texto de combo (más arriba para no tocar el panel del problema)
+        text_y = SCREEN_HEIGHT // 2 - 120  # Subido para evitar la barra negra
         combo_text = ComboTextPopup(SCREEN_WIDTH // 2, text_y)
         self.combo_effects.append(combo_text)
         
@@ -910,6 +928,10 @@ class Game:
         self.feedback_timer = 60
         self.feedback_color = RED
         self.sound_manager.play_sound('wrong', 0.3, self.sound_volume)
+        
+        # Activar efecto de borde ROJO (timeout)
+        self.answer_feedback_timer = self.answer_feedback_max
+        self.answer_feedback_color = RED
         
         # Resetear racha de la mascota
         self.mascota.reset_streak()
@@ -1222,6 +1244,10 @@ class Game:
         if self.screen_flash > 0:
             self.screen_flash -= 1
         
+        # Actualizar timer de feedback visual de borde
+        if self.answer_feedback_timer > 0:
+            self.answer_feedback_timer -= 1
+        
         # Actualizar indicador de combo
         self.combo_indicator.update(self.combo_streak)
         
@@ -1475,9 +1501,72 @@ class Game:
         
         # Panel del problema matemático (ubicado más abajo para no tapar al enemigo)
         problem_y_offset = 250  # Posición ajustada para estar más arriba
-        problem_bg = pygame.Surface((SCREEN_WIDTH - 40, 100), pygame.SRCALPHA)
-        problem_bg.fill((0, 0, 0, 200))
-        self.screen.blit(problem_bg, (20, problem_y_offset))
+        panel_width = SCREEN_WIDTH - 40
+        panel_height = 100
+        panel_x = 20
+        panel_y = problem_y_offset
+        
+        # Determinar color del borde según feedback
+        if self.answer_feedback_timer > 0 and self.answer_feedback_color:
+            progress = self.answer_feedback_timer / self.answer_feedback_max
+            pulse = abs(math.sin(pygame.time.get_ticks() * 0.025)) * 0.4 + 0.6
+            intensity = progress * pulse
+            
+            if self.answer_feedback_color == GREEN:
+                # Borde verde brillante con glow
+                border_r = int(50 * intensity)
+                border_g = int(255 * intensity)
+                border_b = int(100 * intensity)
+                glow_color = (0, 200, 50)
+            else:  # RED
+                # Borde rojo brillante con glow
+                border_r = int(255 * intensity)
+                border_g = int(50 * intensity)
+                border_b = int(50 * intensity)
+                glow_color = (200, 30, 30)
+            
+            border_color = (border_r, border_g, border_b)
+            border_thickness = 4 + int(3 * progress * pulse)  # Borde más grueso y pulsante
+            glow_alpha = int(80 * progress)
+            
+            # Dibujar GLOW exterior (efecto de brillo difuso)
+            glow_expand = int(15 * progress)
+            glow_surface = pygame.Surface((panel_width + glow_expand * 2, panel_height + glow_expand * 2), pygame.SRCALPHA)
+            pygame.draw.rect(glow_surface, (*glow_color, glow_alpha), 
+                           (0, 0, panel_width + glow_expand * 2, panel_height + glow_expand * 2), 
+                           border_radius=15)
+            self.screen.blit(glow_surface, (panel_x - glow_expand, panel_y - glow_expand))
+            
+            # Dibujar fondo del panel
+            problem_bg = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+            problem_bg.fill((0, 0, 0, 220))
+            self.screen.blit(problem_bg, (panel_x, panel_y))
+            
+            # Dibujar borde brillante con color de feedback
+            pygame.draw.rect(self.screen, border_color, 
+                           (panel_x, panel_y, panel_width, panel_height), 
+                           border_thickness, border_radius=8)
+            
+            # Líneas de brillo extra en las esquinas
+            corner_size = 20 + int(10 * progress)
+            bright_color = (min(255, border_r + 50), min(255, border_g + 50), min(255, border_b + 50))
+            # Esquina superior izquierda
+            pygame.draw.line(self.screen, bright_color, (panel_x, panel_y + corner_size), (panel_x, panel_y), 3)
+            pygame.draw.line(self.screen, bright_color, (panel_x, panel_y), (panel_x + corner_size, panel_y), 3)
+            # Esquina superior derecha
+            pygame.draw.line(self.screen, bright_color, (panel_x + panel_width - corner_size, panel_y), (panel_x + panel_width, panel_y), 3)
+            pygame.draw.line(self.screen, bright_color, (panel_x + panel_width, panel_y), (panel_x + panel_width, panel_y + corner_size), 3)
+            # Esquina inferior izquierda
+            pygame.draw.line(self.screen, bright_color, (panel_x, panel_y + panel_height - corner_size), (panel_x, panel_y + panel_height), 3)
+            pygame.draw.line(self.screen, bright_color, (panel_x, panel_y + panel_height), (panel_x + corner_size, panel_y + panel_height), 3)
+            # Esquina inferior derecha
+            pygame.draw.line(self.screen, bright_color, (panel_x + panel_width - corner_size, panel_y + panel_height), (panel_x + panel_width, panel_y + panel_height), 3)
+            pygame.draw.line(self.screen, bright_color, (panel_x + panel_width, panel_y + panel_height - corner_size), (panel_x + panel_width, panel_y + panel_height), 3)
+        else:
+            # Panel normal sin feedback
+            problem_bg = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+            problem_bg.fill((0, 0, 0, 200))
+            self.screen.blit(problem_bg, (panel_x, panel_y))
         
         # Obtener texto del problema y separar el signo "?"
         problem_str = self.math_problem.get_text()
@@ -1729,39 +1818,39 @@ class Game:
                     (x + heart_size // 2, y)
                 ], 2)
         
-        # Feedback de respuesta mejorado
-        if self.feedback_timer > 0:
-            # Efecto de pulso
-            scale = 1.0 + (abs(15 - self.feedback_timer) / 15.0) * 0.3
-            
-            # Sombra del texto
-            feedback_shadow = self.font_medium.render(
-                self.feedback_text, True, BLACK
-            )
-            shadow_rect = feedback_shadow.get_rect(
-                center=(SCREEN_WIDTH // 2 + 3, SCREEN_HEIGHT // 2 + 3)
-            )
-            self.screen.blit(feedback_shadow, shadow_rect)
-            
-            # Texto principal
-            feedback_surface = self.font_medium.render(
-                self.feedback_text, True, self.feedback_color
-            )
-            feedback_rect = feedback_surface.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-            )
-            self.screen.blit(feedback_surface, feedback_rect)
-            
-            # Efecto de glow
-            if self.feedback_color == GREEN:
-                glow_color = (0, 255, 0, 30)
-            else:
-                glow_color = (255, 0, 0, 30)
-            
-            glow_size = int(200 * scale)
-            glow_surface = pygame.Surface((glow_size, glow_size), pygame.SRCALPHA)
-            pygame.draw.circle(glow_surface, glow_color, (glow_size // 2, glow_size // 2), glow_size // 2)
-            self.screen.blit(glow_surface, (SCREEN_WIDTH // 2 - glow_size // 2, SCREEN_HEIGHT // 2 - glow_size // 2))
+        # Feedback de respuesta mejorado (DESHABILITADO - tapaba el texto principal)
+        # if self.feedback_timer > 0:
+        #     # Efecto de pulso
+        #     scale = 1.0 + (abs(15 - self.feedback_timer) / 15.0) * 0.3
+        #     
+        #     # Sombra del texto
+        #     feedback_shadow = self.font_medium.render(
+        #         self.feedback_text, True, BLACK
+        #     )
+        #     shadow_rect = feedback_shadow.get_rect(
+        #         center=(SCREEN_WIDTH // 2 + 3, SCREEN_HEIGHT // 2 + 3)
+        #     )
+        #     self.screen.blit(feedback_shadow, shadow_rect)
+        #     
+        #     # Texto principal
+        #     feedback_surface = self.font_medium.render(
+        #         self.feedback_text, True, self.feedback_color
+        #     )
+        #     feedback_rect = feedback_surface.get_rect(
+        #         center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        #     )
+        #     self.screen.blit(feedback_surface, feedback_rect)
+        #     
+        #     # Efecto de glow
+        #     if self.feedback_color == GREEN:
+        #         glow_color = (0, 255, 0, 30)
+        #     else:
+        #         glow_color = (255, 0, 0, 30)
+        #     
+        #     glow_size = int(200 * scale)
+        #     glow_surface = pygame.Surface((glow_size, glow_size), pygame.SRCALPHA)
+        #     pygame.draw.circle(glow_surface, glow_color, (glow_size // 2, glow_size // 2), glow_size // 2)
+        #     self.screen.blit(glow_surface, (SCREEN_WIDTH // 2 - glow_size // 2, SCREEN_HEIGHT // 2 - glow_size // 2))
     
     def draw_game_over(self):
         """Dibuja la pantalla de fin de juego mejorada"""
