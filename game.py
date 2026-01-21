@@ -26,7 +26,7 @@ from effects import (
     ComboIndicator, ComboShockwave, LightningBolt, ComboTextPopup, ComboParticleBurst
 )
 from ui import Button, Slider, CircularButton
-from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada, InfiniteMode, VictoryCelebration
+from systems import MathProblem, TiempoAdaptativo, SoundManager, MascotaAnimada, InfiniteMode, VictoryCelebration, start_controller, stop_controller
 from visuals import SpaceObject
 
 
@@ -56,7 +56,7 @@ class Game:
             else:
                 raise FileNotFoundError("Fuente no encontrada")
         except Exception as e:
-            print(f"⚠ Usando fuentes de respaldo: {e}")
+            print(f"[!] Usando fuentes de respaldo: {e}")
             # Fallback a fuentes del sistema
             self.font_large = pygame.font.Font(None, 56)
             self.font_medium = pygame.font.Font(None, 36)
@@ -173,6 +173,9 @@ class Game:
         
         # Iniciar música del menú (desde 0.4s)
         self.sound_manager.play_menu_music(self.music_volume)
+        
+        # Iniciar controlador WebSocket para control remoto (conecta al servidor en 10.219.2.8)
+        start_controller(server_url="ws://10.219.2.8:81/")
     
     def _init_menu_buttons(self):
         """Inicializa los botones del menú principal"""
@@ -2896,8 +2899,10 @@ class Game:
         
         pygame.display.flip()
     
-    def run(self):
-        """Bucle principal del juego"""
+    async def run(self):
+        """Bucle principal del juego (asíncrono para Pygbag)"""
+        import asyncio
+        
         while self.running:
             events = pygame.event.get()
             for event in events:
@@ -2909,6 +2914,10 @@ class Game:
             self.update()
             self.draw()
             self.clock.tick(FPS)
+            
+            # Yield control al navegador (requerido por Pygbag)
+            await asyncio.sleep(0)
         
+        # Detener controlador WebSocket
+        stop_controller()
         pygame.quit()
-        sys.exit()

@@ -43,13 +43,13 @@ class TiempoAdaptativo:
                 self.usar_modelo = True
                 print("✅ Modelo ML cargado correctamente para modo infinito")
             except FileNotFoundError:
-                print("⚠️ Archivo mejor_modelo_tiempo.pkl no encontrado")
+                print("[!] Archivo mejor_modelo_tiempo.pkl no encontrado")
                 self.usar_modelo = False
             except Exception as e:
-                print(f"⚠️ Error al cargar el modelo: {e}")
+                print(f"[!] Error al cargar el modelo: {e}")
                 self.usar_modelo = False
         else:
-            print("⚠️ joblib o numpy no disponible, usando tiempo fijo")
+            print("[!] joblib o numpy no disponible, usando tiempo fijo")
     
     def predecir_tiempo(self, signo, respuestas_correctas, vidas, nivel):
         """Predice el tiempo de respuesta usando el modelo ML."""

@@ -2,9 +2,12 @@
 """
 Operación Relámpago - Juego Educativo de Matemáticas
 Punto de entrada principal
+
+Compatible con Pygbag para ejecución en navegador web.
 """
 
 import pygame
+import asyncio
 import os
 import sys
 
@@ -23,6 +26,11 @@ pygame.mixer.init()
 from game import Game
 
 
-if __name__ == "__main__":
+async def main():
+    """Función principal asíncrona para compatibilidad con Pygbag"""
     game = Game()
-    game.run()
+    await game.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
