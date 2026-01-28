@@ -77,6 +77,7 @@ class Game:
         self.modo_infinito = False
         self.tiempo_adaptativo = None
         self.infinite_mode = None  # Instancia de InfiniteMode para manejo de oleadas
+        self.wave_time_max = None  # Tiempo ML calculado una vez por oleada (en frames)
         self.victory_celebration = None  # Animación de victoria
 
         
@@ -87,6 +88,10 @@ class Game:
         self.pause_buttons = []
         self.sliders = []
         self._init_menu_buttons()
+        
+        # Índice de botón seleccionado para navegación con teclado
+        self.menu_selected_index = 0  # Para menú principal
+        self.pause_selected_index = 0  # Para menú de pausa
         
         self.sliders = []
         self._init_menu_buttons()
@@ -502,21 +507,35 @@ class Game:
         config = LEVEL_CONFIG[self.level]
         self.math_problem = MathProblem(config["num_range"])
         
-        # En modo infinito, usar tiempo adaptativo ML
-        if self.modo_infinito and self.tiempo_adaptativo:
-            # Predecir tiempo usando el modelo ML
-            tiempo_segundos = self.tiempo_adaptativo.obtener_tiempo(
-                self.math_problem.operation,
-                self.player.correct_answers,
-                self.player.lives,
-                self.level
-            )
-            # Convertir segundos a frames (FPS = 60)
-            self.question_timer_max = int(tiempo_segundos * FPS)
+        # En modo infinito, usar tiempo fijo de la oleada (calculado una vez por oleada)
+        if self.modo_infinito and self.wave_time_max is not None:
+            # Usar el tiempo pre-calculado al inicio de la oleada
+            self.question_timer_max = self.wave_time_max
             self.question_timer = self.question_timer_max
         else:
             # Modo normal: timer fijo
             self.question_timer = self.question_timer_max
+
+    
+    def _calculate_wave_time(self):
+        """Calcula el tiempo ML para la oleada actual (se llama una vez por oleada)"""
+        # Primera oleada siempre dura 10 segundos
+        if self.infinite_mode and self.infinite_mode.wave <= 1:
+            self.wave_time_max = 600  # 10 segundos (60 FPS * 10)
+            return
+
+        if self.tiempo_adaptativo:
+            # Usar operación promedio (+) para predicción de oleada
+            tiempo_segundos = self.tiempo_adaptativo.obtener_tiempo(
+                "+",  # Operación base para predicción de oleada
+                self.player.correct_answers if self.player else 0,
+                self.player.lives if self.player else 3,
+                self.level
+            )
+            # Convertir segundos a frames (FPS = 60)
+            self.wave_time_max = int(tiempo_segundos * FPS)
+        else:
+            self.wave_time_max = 600  # 10 segundos por defecto
 
     
     def handle_input(self, keys, events):
@@ -537,6 +556,33 @@ class Game:
                     self.toggle_fullscreen()
                     continue
                 
+                # Tecla R para reiniciar el juego EN CUALQUIER MOMENTO
+                if event.key == pygame.K_r:
+                    # Detener el sonido final antes de reiniciar
+                    self.sound_manager.stop_final_sound()
+                    # Reiniciar juego respetando el modo actual
+                    if self.modo_infinito:
+                        # Reiniciar modo infinito
+                        self.infinite_mode.reset()
+                        self.tiempo_adaptativo.reset() if self.tiempo_adaptativo else None
+                        wave_config = self.infinite_mode.next_wave()
+                        self.level = wave_config["visual_level"]
+                        self.reset_game()
+                        self.generate_enemies_infinite(wave_config)
+                        self._calculate_wave_time()  # Calcular tiempo inicial
+                    else:
+                        # Reiniciar modo normal
+                        self.modo_infinito = False # Asegurar estado
+                        self.tiempo_adaptativo = None
+                        self.level = 1
+                        self.reset_game()
+                        
+                    self.game_state = "level_intro"
+                    self.level_intro_timer = 180
+                    self.sound_manager.change_level_music(self.level, self.music_volume)
+                    self.paused = False
+                    continue
+                
                 # Durante el juego - ESC para pausar (verificar primero para no interferir con WASD)
                 if self.game_state == "playing":
                     if event.key == pygame.K_ESCAPE:
@@ -553,13 +599,28 @@ class Game:
                 if self.game_state == "menu":
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
+                    elif event.key == pygame.K_UP:
+                        # Navegar hacia arriba en el menú
+                        self.menu_selected_index = (self.menu_selected_index - 1) % len(self.menu_buttons)
+                    elif event.key == pygame.K_DOWN:
+                        # Navegar hacia abajo en el menú
+                        self.menu_selected_index = (self.menu_selected_index + 1) % len(self.menu_buttons)
+                    elif event.key in [pygame.K_RETURN, pygame.K_SPACE]:
+                        # Activar el botón seleccionado
+                        self._activate_menu_button(self.menu_selected_index)
                     continue
                 
-                # Menú de pausa - ESC para reanudar
+                # Menú de pausa - navegación con teclado
                 if self.game_state == "paused":
                     if event.key == pygame.K_ESCAPE:
                         self.game_state = "playing"
                         self.paused = False
+                    elif event.key == pygame.K_UP:
+                        self.pause_selected_index = (self.pause_selected_index - 1) % len(self.pause_buttons)
+                    elif event.key == pygame.K_DOWN:
+                        self.pause_selected_index = (self.pause_selected_index + 1) % len(self.pause_buttons)
+                    elif event.key in [pygame.K_RETURN, pygame.K_SPACE]:
+                        self._activate_pause_button(self.pause_selected_index)
                     continue
                 
                 # Pantallas de controles y settings - ESC para volver
@@ -579,19 +640,7 @@ class Game:
                         # La música continúa desde el nivel anterior, no se reinicia
                     continue
                 
-                # Tecla R para reiniciar el juego
-                if event.key == pygame.K_r and self.game_state in ["victory", "lose"]:
-                    # Detener el sonido final antes de reiniciar
-                    self.sound_manager.stop_final_sound()
-                    # Reiniciar juego
-                    self.modo_infinito = False
-                    self.tiempo_adaptativo = None
-                    self.reset_game()
-                    self.game_state = "level_intro"
-                    self.level_intro_timer = 180
-                    self.sound_manager.change_level_music(self.level, self.music_volume)
-                    self.paused = False
-                    continue
+
                 
                 # Tecla ESC o ENTER para volver al menú
                 if event.key in [pygame.K_ESCAPE, pygame.K_RETURN] and self.game_state in ["victory", "lose"]:
@@ -626,6 +675,7 @@ class Game:
                         wave_config = self.infinite_mode.next_wave()
                         self.level = wave_config["visual_level"]
                         self.reset_game()
+                        self._calculate_wave_time()  # Calcular tiempo ML una vez para toda la oleada
                         # Regenerar enemigos con config de oleada infinita
                         self.generate_enemies_infinite(wave_config)
                         self.sound_manager.change_level_music(self.level, self.music_volume)
@@ -687,6 +737,45 @@ class Game:
                         self.sound_manager.change_level_music(1, self.music_volume) # Reiniciar música
                         self.sound_manager.play_menu_music(self.music_volume)
         
+    
+    def _activate_menu_button(self, index):
+        """Activa el botón del menú principal según el índice"""
+        if index == 0:  # Jugar (Modo Normal)
+            self.modo_infinito = False
+            self.tiempo_adaptativo = None
+            self.game_state = "level_intro"
+            self.level_intro_timer = 180
+            self.level = 1
+            self.reset_game()
+            self.sound_manager.change_level_music(1, self.music_volume)
+        elif index == 1:  # MODO INFINITO (con ML adaptativo)
+            self.modo_infinito = True
+            self.tiempo_adaptativo = TiempoAdaptativo()
+            self.infinite_mode = InfiniteMode()
+            self.game_state = "level_intro"
+            self.level_intro_timer = 180
+            wave_config = self.infinite_mode.next_wave()
+            self.level = wave_config["visual_level"]
+            self.reset_game()
+            self._calculate_wave_time()  # Calcular tiempo ML una vez para toda la oleada
+            self.generate_enemies_infinite(wave_config)
+            self.sound_manager.change_level_music(self.level, self.music_volume)
+    
+    def _activate_pause_button(self, index):
+        """Activa el botón del menú de pausa según el índice"""
+        if index == 0:  # Reanudar
+            self.game_state = "playing"
+            self.paused = False
+        elif index == 1:  # Controles
+            self.game_state = "controls"
+        elif index == 2:  # Configurar Sonido
+            self.game_state = "settings"
+            self._sync_sliders()
+        elif index == 3:  # Salir al Menú
+            self.game_state = "menu"
+            self.paused = False
+            self.sound_manager.change_level_music(1, self.music_volume)
+            self.sound_manager.play_menu_music(self.music_volume)
     
     def process_answer(self, operation):
         """Procesa la respuesta del jugador"""
@@ -1152,11 +1241,18 @@ class Game:
         # Actualizar jugador
         self.player.update()
         
-        # Movimiento del jugador con flechas
+        # Movimiento del jugador con flechas (teclado físico)
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
+        
+        # También verificar señales remotas del WebSocket
+        from systems import get_controller
+        ws_controller = get_controller()
+        remote_left = ws_controller.is_key_pressed("LEFT") if ws_controller else False
+        remote_right = ws_controller.is_key_pressed("RIGHT") if ws_controller else False
+        
+        if keys[pygame.K_LEFT] or remote_left:
             self.player.move_left()
-        if keys[pygame.K_RIGHT]:
+        if keys[pygame.K_RIGHT] or remote_right:
             self.player.move_right()
         self.player.apply_movement()
         
@@ -1187,6 +1283,7 @@ class Game:
                         self.level = wave_config["visual_level"]
                         self.level_intro_timer = 90
                         self.game_state = "level_intro"
+                        self._calculate_wave_time()  # Calcular tiempo ML una vez para toda la oleada
                         self.generate_enemies_infinite(wave_config)
                         self.generate_space_objects()
                         # Cambiar música si el nivel visual cambió
@@ -1300,6 +1397,7 @@ class Game:
                         self.level = wave_config["visual_level"]
                         self.level_intro_timer = 90
                         self.game_state = "level_intro"
+                        self._calculate_wave_time()  # Calcular tiempo ML una vez para toda la oleada
                         # Limpiar combo streak y efectos para evitar que ataquen en vacio
                         self.combo_streak = 0
                         self.combo_effects = []
@@ -1485,14 +1583,6 @@ class Game:
             # Texto del modo
             mode_text = self.font_tiny.render("⚡ MODO INFINITO", True, PINK)
             self.screen.blit(mode_text, (timer_bar_x, infinite_y + 4))
-            
-            # Mostrar tiempo adaptativo si el sistema está activo
-            if self.tiempo_adaptativo and self.tiempo_adaptativo.usar_modelo:
-                ml_text = self.font_tiny.render("ML", True, GREEN)
-            else:
-                ml_text = self.font_tiny.render("--", True, YELLOW)
-            ml_rect = ml_text.get_rect(right=timer_bar_x + timer_bar_width, centery=infinite_y + 12)
-            self.screen.blit(ml_text, ml_rect)
 
         
         # Panel del problema matemático (ubicado más abajo para no tapar al enemigo)
@@ -1660,10 +1750,10 @@ class Game:
             # Dibujar teclas visuales (W, A, S, D) - REDISEÑADO
             # Configuración: Tecla, Operación, Color
             controls_config = [
-                ('W', '+', RED), 
-                ('A', '-', BLUE), 
-                ('S', '*', YELLOW), 
-                ('D', '/', GREEN)
+                ('W', '+', BLUE), 
+                ('A', '-', RED), 
+                ('S', '×', GREEN), 
+                ('D', '÷', YELLOW)
             ]
             
             # Configuración de diseño
@@ -2265,8 +2355,22 @@ class Game:
         self.screen.blit(subtitle, subtitle_rect)
         
         # Dibujar botones rectangulares principales
-        for button in self.menu_buttons:
+        for i, button in enumerate(self.menu_buttons):
             button.draw(self.screen)
+            # Dibujar indicador de selección para navegación con teclado
+            if i == self.menu_selected_index:
+                # Borde brillante cyan alrededor del botón seleccionado
+                glow_rect = pygame.Rect(button.rect.x - 4, button.rect.y - 4, 
+                                       button.rect.width + 8, button.rect.height + 8)
+                pygame.draw.rect(self.screen, (0, 255, 255), glow_rect, 3, border_radius=18)
+                # Flecha indicadora a la izquierda
+                arrow_x = button.rect.x - 25
+                arrow_y = button.rect.y + button.rect.height // 2
+                pygame.draw.polygon(self.screen, (0, 255, 255), [
+                    (arrow_x, arrow_y),
+                    (arrow_x - 12, arrow_y - 8),
+                    (arrow_x - 12, arrow_y + 8)
+                ])
         
         # Dibujar botones circulares (esquina inferior derecha)
         for btn in self.circular_buttons:
@@ -2629,7 +2733,7 @@ class Game:
             if wave_num == 1:
                 main_title = "MODO INFINITO"
             else:
-                main_title = f"WAVE {wave_num}"
+                main_title = f"OLEADA {wave_num}"
             
             # Efecto pixel art con múltiples capas
             for i in range(5):
@@ -2666,12 +2770,7 @@ class Game:
             info_rect = info_text.get_rect(center=(SCREEN_WIDTH // 2, 320))
             self.screen.blit(info_text, info_rect)
             
-            # Tiempo predicho
-            if self.tiempo_adaptativo:
-                tiempo_info = f"Tiempo: {self.tiempo_adaptativo.tiempo_actual:.1f}s (adaptativo)"
-                tiempo_text = self.font_small.render(tiempo_info, True, GOLD)
-                tiempo_rect = tiempo_text.get_rect(center=(SCREEN_WIDTH // 2, 360))
-                self.screen.blit(tiempo_text, tiempo_rect)
+            # (Mensaje de tiempo eliminado)
             
             # Instrucción adicional
             hint_text = self.font_tiny.render("¡Sobrevive el mayor tiempo posible!", True, (180, 180, 180))
@@ -2774,8 +2873,22 @@ class Game:
                         (line_x, panel_y + 90), (line_x + line_width, panel_y + 90), 3)
         
         # Dibujar botones del menú de pausa
-        for button in self.pause_buttons:
+        for i, button in enumerate(self.pause_buttons):
             button.draw(self.screen)
+            # Dibujar indicador de selección para navegación con teclado
+            if i == self.pause_selected_index:
+                # Borde brillante cyan alrededor del botón seleccionado
+                glow_rect = pygame.Rect(button.rect.x - 4, button.rect.y - 4, 
+                                       button.rect.width + 8, button.rect.height + 8)
+                pygame.draw.rect(self.screen, (0, 255, 255), glow_rect, 3, border_radius=18)
+                # Flecha indicadora a la izquierda
+                arrow_x = button.rect.x - 25
+                arrow_y = button.rect.y + button.rect.height // 2
+                pygame.draw.polygon(self.screen, (0, 255, 255), [
+                    (arrow_x, arrow_y),
+                    (arrow_x - 12, arrow_y - 8),
+                    (arrow_x - 12, arrow_y + 8)
+                ])
         
         # Instrucción
         hint_text = self.font_tiny.render("Presiona ESC para reanudar", True, (200, 200, 200))

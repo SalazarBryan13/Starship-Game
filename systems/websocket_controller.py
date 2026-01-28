@@ -108,12 +108,13 @@ class WebSocketController:
         """Procesa una señal recibida y la convierte en evento pygame"""
         print(f"Señal recibida: {signal}")
         
-        # Manejar señal PLAY como click izquierdo
+        # Manejar señal PLAY como tecla ENTER (para activar botón seleccionado)
         if signal == "PLAY":
-            self._post_mouse_click()
+            self._post_key_event(pygame.K_RETURN, pygame.KEYDOWN)
+            self._post_key_event(pygame.K_RETURN, pygame.KEYUP)
             return
         
-        # Manejar señales de movimiento continuo
+        # Manejar señales de movimiento continuo con sufijos _START/_STOP
         if signal.endswith("_START"):
             base_signal = signal.replace("_START", "")
             if base_signal in self.SIGNAL_TO_KEY:
@@ -130,12 +131,29 @@ class WebSocketController:
                 self._post_key_event(self.SIGNAL_TO_KEY[base_signal], pygame.KEYUP)
             return
         
+        # Para señales de movimiento simples (LEFT, RIGHT, UP, DOWN), 
+        # mantenerlas presionadas por un breve periodo
+        if signal in ["LEFT", "RIGHT", "UP", "DOWN"]:
+            with self.pressed_lock:
+                self.pressed_keys.add(signal)
+            self._post_key_event(self.SIGNAL_TO_KEY[signal], pygame.KEYDOWN)
+            # Programar la liberación de la tecla después de 200ms
+            threading.Timer(0.2, self._release_key, args=[signal]).start()
+            return
+        
         # Manejar señales normales (tecla presionada y liberada)
         if signal in self.SIGNAL_TO_KEY:
             key = self.SIGNAL_TO_KEY[signal]
             self._post_key_event(key, pygame.KEYDOWN)
             # Para teclas de una sola pulsación, también enviar KEYUP después
             self._post_key_event(key, pygame.KEYUP)
+    
+    def _release_key(self, signal):
+        """Libera una tecla después del timeout"""
+        with self.pressed_lock:
+            self.pressed_keys.discard(signal)
+        if signal in self.SIGNAL_TO_KEY:
+            self._post_key_event(self.SIGNAL_TO_KEY[signal], pygame.KEYUP)
     
     def _post_key_event(self, key, event_type):
         """Publica un evento de tecla en la cola de pygame"""
