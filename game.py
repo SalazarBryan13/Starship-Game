@@ -9,6 +9,7 @@ import math
 import os
 import json
 import sys
+from utils.resource import resource_path, writable_path
 
 from config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS,
@@ -41,7 +42,7 @@ class Game:
         
         # === FUENTES PIXEL ART PARA ESTÉTICA RETRO ===
         # Intentar cargar la fuente pixel art PressStart2P
-        pixel_font_path = os.path.join(os.path.dirname(__file__), "fonts", "PressStart2P.ttf")
+        pixel_font_path = resource_path("fonts", "PressStart2P.ttf")
         
         try:
             if os.path.exists(pixel_font_path):
@@ -162,13 +163,15 @@ class Game:
         self.menu_left_img = None
         self.menu_right_img = None
         try:
-            if os.path.exists("menu_left.png"):
-                self.menu_left_img = pygame.image.load("menu_left.png").convert_alpha()
+            menu_left_path = resource_path("menu_left.png")
+            if os.path.exists(menu_left_path):
+                self.menu_left_img = pygame.image.load(menu_left_path).convert_alpha()
                 # Escalar si es necesario (ajustar tamaño según diseño)
                 self.menu_left_img = pygame.transform.scale(self.menu_left_img, (150, 150))
             
-            if os.path.exists("menu_right.png"):
-                self.menu_right_img = pygame.image.load("menu_right.png").convert_alpha()
+            menu_right_path = resource_path("menu_right.png")
+            if os.path.exists(menu_right_path):
+                self.menu_right_img = pygame.image.load(menu_right_path).convert_alpha()
                 # Escalar si es necesario
                 self.menu_right_img = pygame.transform.scale(self.menu_right_img, (150, 150))
         except Exception as e:
@@ -978,8 +981,9 @@ class Game:
 
             # Cargar datos existentes si el archivo ya existe
             resultados = []
-            if os.path.exists("resultados.json"):
-                with open("resultados.json", "r", encoding="utf-8") as f:
+            resultados_path = writable_path("resultados.json")
+            if os.path.exists(resultados_path):
+                with open(resultados_path, "r", encoding="utf-8") as f:
                     try:
                         resultados = json.load(f)
                     except json.JSONDecodeError:
@@ -988,7 +992,7 @@ class Game:
             resultados.append(entry)
 
             # Guardar lista actualizada
-            with open("resultados.json", "w", encoding="utf-8") as f:
+            with open(resultados_path, "w", encoding="utf-8") as f:
                 json.dump(resultados, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"Error al guardar resultados en resultados.json: {e}")

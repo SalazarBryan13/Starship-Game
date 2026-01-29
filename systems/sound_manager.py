@@ -5,6 +5,7 @@ SoundManager - Gestor de sonidos del juego
 
 import pygame
 import os
+from utils.resource import resource_path
 
 # Importar librerías opcionales
 try:
@@ -303,7 +304,7 @@ class SoundManager:
                 self.sounds[key] = None
 
             # Intentar cargar sonidos personalizados desde la carpeta sounds
-            sounds_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sounds')
+            sounds_dir = resource_path('sounds')
             
             # Cargar laser_combo si existe (sonido especial para combo)
             combo_path = os.path.join(sounds_dir, 'laser_combo.wav')
@@ -353,7 +354,7 @@ class SoundManager:
             
             pygame.mixer.music.stop()
             
-            music_path = os.path.join(os.path.dirname(__file__), "..", "sounds", "Battleship.ogg")
+            music_path = resource_path("sounds", "Battleship.ogg")
             if not os.path.exists(music_path):
                 print(f"Error: No se encontró el archivo {music_path}")
                 self.music_playing = False
@@ -392,7 +393,7 @@ class SoundManager:
             # Detener cualquier música que esté sonando antes de reproducir la del menú
             pygame.mixer.music.stop()
             
-            music_path = os.path.join(os.path.dirname(__file__), "..", "sounds", "Brave Pilots (Menu Screen).ogg")
+            music_path = resource_path("sounds", "Brave Pilots (Menu Screen).ogg")
             if not os.path.exists(music_path):
                 print(f"Error: No se encontró {music_path}")
                 return

@@ -5,7 +5,17 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('Battleship.ogg', '.')],  # Incluir archivo de música
+    datas=[
+        # Assets completos
+        ('sounds', 'sounds'),
+        ('fonts', 'fonts'),
+
+        # Archivos sueltos usados por el juego
+        ('menu_left.png', '.'),
+        ('menu_right.png', '.'),
+        ('mejor_modelo_tiempo.pkl', '.'),
+        ('1000registros.json', '.'),
+    ],
     hiddenimports=['numpy', 'scipy', 'scipy.io.wavfile', 'scipy.signal'],
     hookspath=[],
     hooksconfig={},

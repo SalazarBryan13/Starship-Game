@@ -3,6 +3,9 @@
 Sistema de tiempo adaptativo usando Machine Learning
 """
 
+# Rutas compatibles con PyInstaller
+from utils.resource import resource_path
+
 # Importar librerías opcionales
 try:
     import numpy as np
@@ -39,7 +42,7 @@ class TiempoAdaptativo:
         # Intentar cargar el modelo ML
         if HAS_JOBLIB and HAS_NUMPY:
             try:
-                self.modelo = joblib.load('mejor_modelo_tiempo.pkl')
+                self.modelo = joblib.load(resource_path('mejor_modelo_tiempo.pkl'))
                 self.usar_modelo = True
                 print("✅ Modelo ML cargado correctamente para modo infinito")
             except FileNotFoundError:
