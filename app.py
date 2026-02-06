@@ -23,6 +23,8 @@ def index():
         os.path.join(BUILD_DIR, 'index.html'),
         os.path.join(BUILD_DIR, 'main.html'),
         os.path.join(os.path.dirname(__file__), 'build', 'index.html'),
+        os.path.join(os.path.dirname(__file__), 'index.html'),
+        os.path.join(os.path.dirname(__file__), 'main.html'),
     ]
     
     for index_path in possible_paths:
