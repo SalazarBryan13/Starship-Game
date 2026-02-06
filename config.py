@@ -14,13 +14,20 @@ FPS = 60
 
 # Detectar si estamos ejecutando en web (Pygbag)
 # Pygbag establece ciertas variables de entorno y características
+# Mejorar detección para asegurar que funcione en web
 IS_WEB = (
     os.environ.get('PYGBAG', '').lower() == 'true' or
     'pygbag' in str(sys.modules) or
-    hasattr(sys, '_getframe') and 'emscripten' in str(sys.platform)
+    hasattr(sys, '_getframe') and 'emscripten' in str(sys.platform) or
+    'browser' in str(sys.platform).lower() or
+    hasattr(sys, 'platform') and sys.platform == 'emscripten' or
+    '__EMSCRIPTEN__' in dir(sys) or
+    # Detectar si estamos en navegador por otras características
+    (hasattr(os, 'environ') and 'HTTP_HOST' in os.environ)
 )
-# FPS reducido para web (mejor rendimiento)
-WEB_FPS = 30 if IS_WEB else 60
+# FPS MUY reducido para web (mejor rendimiento)
+# WebAssembly es más lento, necesitamos FPS más bajo
+WEB_FPS = 15 if IS_WEB else 60  # Reducido a 15 FPS para mejor rendimiento
 
 # Colores mejorados
 BLACK = (0, 0, 0)

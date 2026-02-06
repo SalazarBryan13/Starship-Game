@@ -99,7 +99,7 @@ class Game:
         
         # Generar estrellas de fondo (fijas)
         # Reducir cantidad en modo web para mejor rendimiento
-        num_stars = 50 if IS_WEB else 100
+        num_stars = 25 if IS_WEB else 100
         self.stars = []
         for _ in range(num_stars):
             self.stars.append((
@@ -114,7 +114,8 @@ class Game:
         self._cache_all_backgrounds()
         
         # Objetos espaciales decorativos
-        self.space_objects = []
+        # Deshabilitar en web para mejor rendimiento
+        self.space_objects = [] if IS_WEB else []
         
         # Explosiones y efectos visuales
         self.explosions = []
@@ -137,12 +138,12 @@ class Game:
         # Reducir cantidad en modo web para mejor rendimiento
         self.menu_particles = []
         if IS_WEB:
-            # Versión optimizada para web (menos partículas)
-            for _ in range(5):
+            # Versión ultra-optimizada para web (mínimas partículas)
+            for _ in range(3):
                 self.menu_particles.append(MenuParticle('star'))
-            for _ in range(15):
-                self.menu_particles.append(MenuParticle('dust'))
             for _ in range(8):
+                self.menu_particles.append(MenuParticle('dust'))
+            for _ in range(4):
                 self.menu_particles.append(MenuParticle('spark'))
         else:
             # Versión completa para desktop
@@ -155,7 +156,7 @@ class Game:
         
         # Símbolos matemáticos flotantes
         # Reducir cantidad en modo web
-        num_symbols = 6 if IS_WEB else 12
+        num_symbols = 3 if IS_WEB else 12
         self.floating_math_symbols = []
         for _ in range(num_symbols):
             symbol = FloatingMathSymbol()
@@ -414,7 +415,8 @@ class Game:
         self.combo_effects = []
         
         # Mascota animada (robot que da ánimos)
-        self.mascota = MascotaAnimada()
+        # Deshabilitar en web para mejor rendimiento
+        self.mascota = None if IS_WEB else MascotaAnimada()
         
         self.generate_enemies()
         self.generate_problem()
@@ -476,6 +478,10 @@ class Game:
     def generate_space_objects(self):
         """Genera objetos espaciales decorativos según el nivel (OPTIMIZADO)"""
         self.space_objects = []
+        
+        # Deshabilitar completamente en web para mejor rendimiento
+        if IS_WEB:
+            return
         
         # Asteroides (reducido en nivel 3 para mejor rendimiento)
         asteroid_counts = {1: 5, 2: 6, 3: 6}  # Era 5, 8, 10
@@ -855,8 +861,10 @@ class Game:
                         self.player_projectiles.append(projectile)
                         self.sound_manager.play_sound('shoot', 0.2, self.sound_volume)
             
-            # Activar celebración de la mascota y obtener bonus
-            bonus = self.mascota.celebrar()
+            # Activar celebración de la mascota y obtener bonus (solo si no es web)
+            bonus = 0
+            if self.mascota:
+                bonus = self.mascota.celebrar()
             if bonus > 0:
                 self.player.score += bonus
                 self.feedback_text = f"¡CORRECTO! +10 (BONUS +{bonus})"
@@ -878,8 +886,9 @@ class Game:
             self.combo_streak = 0
             self.combo_indicator.update(0)
             
-            # Resetear racha de la mascota
-            self.mascota.reset_streak()
+            # Resetear racha de la mascota (solo si no es web)
+            if self.mascota:
+                self.mascota.reset_streak()
             
             # Los enemigos atacan
             if self.enemies:
@@ -926,29 +935,31 @@ class Game:
         
         # Crear efectos visuales
         # 1. Onda expansiva desde el jugador
-        shockwave = ComboShockwave(player_center_x, player_center_y)
-        self.combo_effects.append(shockwave)
-        
-        # 2. Explosión de partículas
-        particles = ComboParticleBurst(player_center_x, player_center_y)
-        self.combo_effects.append(particles)
-        
-        # 3. Texto de combo (más arriba para no tocar el panel del problema)
-        text_y = SCREEN_HEIGHT // 2 - 120  # Subido para evitar la barra negra
-        combo_text = ComboTextPopup(SCREEN_WIDTH // 2, text_y)
-        self.combo_effects.append(combo_text)
-        
-        # 4. Dañar a TODOS los enemigos y crear rayos hacia cada uno
-        for enemy in self.enemies:
-            if not enemy.is_dead():
-                # Crear rayo hacia el enemigo
-                enemy_center_x = enemy.x + enemy.width // 2
-                enemy_center_y = enemy.y + enemy.height // 2
-                lightning = LightningBolt(
-                    player_center_x, player_center_y,
-                    enemy_center_x, enemy_center_y
-                )
-                self.combo_effects.append(lightning)
+        # Efectos de combo (deshabilitados en web para mejor rendimiento)
+        if not IS_WEB:
+            shockwave = ComboShockwave(player_center_x, player_center_y)
+            self.combo_effects.append(shockwave)
+            
+            # 2. Explosión de partículas
+            particles = ComboParticleBurst(player_center_x, player_center_y)
+            self.combo_effects.append(particles)
+            
+            # 3. Texto de combo (más arriba para no tocar el panel del problema)
+            text_y = SCREEN_HEIGHT // 2 - 120  # Subido para evitar la barra negra
+            combo_text = ComboTextPopup(SCREEN_WIDTH // 2, text_y)
+            self.combo_effects.append(combo_text)
+            
+            # 4. Dañar a TODOS los enemigos y crear rayos hacia cada uno
+            for enemy in self.enemies:
+                if not enemy.is_dead():
+                    # Crear rayo hacia el enemigo
+                    enemy_center_x = enemy.x + enemy.width // 2
+                    enemy_center_y = enemy.y + enemy.height // 2
+                    lightning = LightningBolt(
+                        player_center_x, player_center_y,
+                        enemy_center_x, enemy_center_y
+                    )
+                    self.combo_effects.append(lightning)
                 
                 # Dañar al enemigo
                 enemy.take_damage(2)  # Daño doble
@@ -957,6 +968,9 @@ class Game:
                 from effects import Explosion
                 explosion = Explosion(enemy_center_x, enemy_center_y)
                 self.explosions.append(explosion)
+                # Limitar explosiones en web para mejor rendimiento
+                if IS_WEB and len(self.explosions) > 3:
+                    self.explosions.pop(0)  # Eliminar la más antigua
         
         # Sonido épico
         # Si existe el sonido especial de combo, usarlo con prioridad y volumen alto
@@ -1272,8 +1286,9 @@ class Game:
             self.player.move_right()
         self.player.apply_movement()
         
-        # Actualizar mascota animada
-        self.mascota.update()
+        # Actualizar mascota animada (solo si no es web)
+        if self.mascota:
+            self.mascota.update()
         
         # Actualizar enemigos
         for enemy in self.enemies[:]:
@@ -2179,8 +2194,9 @@ class Game:
             for enemy in self.enemies:
                 enemy.draw(self.screen)
             
-            # Dibujar explosiones
-            for explosion in self.explosions:
+            # Dibujar explosiones (limitar en web para mejor rendimiento)
+            max_explosions = 3 if IS_WEB else 999
+            for explosion in self.explosions[:max_explosions]:
                 explosion.draw(self.screen)
             
             # Dibujar proyectiles
@@ -2190,9 +2206,10 @@ class Game:
             for projectile in self.enemy_projectiles:
                 projectile.draw(self.screen)
             
-            # Dibujar efectos de combo (encima de todo excepto UI)
-            for effect in self.combo_effects:
-                if hasattr(effect, 'draw'):
+            # Dibujar efectos de combo (deshabilitados en web para mejor rendimiento)
+            if not IS_WEB:
+                for effect in self.combo_effects:
+                    if hasattr(effect, 'draw'):
                     if isinstance(effect, ComboTextPopup):
                         effect.draw(self.screen, self.font_large)
                     else:
@@ -2211,8 +2228,9 @@ class Game:
             if self.combo_streak > 0:
                 self.combo_indicator.draw(self.screen, self.font_tiny)
             
-            # Dibujar mascota (encima de la UI)
-            self.mascota.draw(self.screen)
+            # Dibujar mascota (encima de la UI, solo si no es web)
+            if self.mascota:
+                self.mascota.draw(self.screen)
         elif self.game_state == "paused":
             # Dibujar elementos del juego (fondo)
             self.player.draw(self.screen)
@@ -2944,8 +2962,9 @@ class Game:
             for enemy in self.enemies:
                 enemy.draw(self.screen)
             
-            # Dibujar explosiones
-            for explosion in self.explosions:
+            # Dibujar explosiones (limitar en web para mejor rendimiento)
+            max_explosions = 3 if IS_WEB else 999
+            for explosion in self.explosions[:max_explosions]:
                 explosion.draw(self.screen)
             
             # Dibujar proyectiles
@@ -2955,9 +2974,10 @@ class Game:
             for projectile in self.enemy_projectiles:
                 projectile.draw(self.screen)
             
-            # Dibujar efectos de combo (encima de todo excepto UI)
-            for effect in self.combo_effects:
-                if hasattr(effect, 'draw'):
+            # Dibujar efectos de combo (deshabilitados en web para mejor rendimiento)
+            if not IS_WEB:
+                for effect in self.combo_effects:
+                    if hasattr(effect, 'draw'):
                     if isinstance(effect, ComboTextPopup):
                         effect.draw(self.screen, self.font_large)
                     else:
@@ -2976,8 +2996,9 @@ class Game:
             if self.combo_streak > 0:
                 self.combo_indicator.draw(self.screen, self.font_tiny)
             
-            # Dibujar mascota (encima de la UI)
-            self.mascota.draw(self.screen)
+            # Dibujar mascota (encima de la UI, solo si no es web)
+            if self.mascota:
+                self.mascota.draw(self.screen)
         elif self.game_state == "paused":
             # Dibujar elementos del juego (fondo)
             self.player.draw(self.screen)
