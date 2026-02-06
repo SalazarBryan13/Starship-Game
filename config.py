@@ -20,7 +20,8 @@ IS_WEB = (
     hasattr(sys, '_getframe') and 'emscripten' in str(sys.platform)
 )
 # FPS reducido para web (mejor rendimiento)
-WEB_FPS = 30 if IS_WEB else 60
+# Balance: 25 FPS es aceptable y mejora significativamente el rendimiento
+WEB_FPS = 25 if IS_WEB else 60
 
 # Colores mejorados
 BLACK = (0, 0, 0)

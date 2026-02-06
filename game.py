@@ -477,6 +477,10 @@ class Game:
         """Genera objetos espaciales decorativos según el nivel (OPTIMIZADO)"""
         self.space_objects = []
         
+        # Deshabilitar objetos espaciales en web para mejor rendimiento
+        if IS_WEB:
+            return
+        
         # Asteroides (reducido en nivel 3 para mejor rendimiento)
         asteroid_counts = {1: 5, 2: 6, 3: 6}  # Era 5, 8, 10
         for _ in range(asteroid_counts.get(self.level, 5)):
@@ -2179,8 +2183,9 @@ class Game:
             for enemy in self.enemies:
                 enemy.draw(self.screen)
             
-            # Dibujar explosiones
-            for explosion in self.explosions:
+            # Dibujar explosiones (limitar a 5 en web para mejor rendimiento)
+            max_explosions = 5 if IS_WEB else 999
+            for explosion in self.explosions[:max_explosions]:
                 explosion.draw(self.screen)
             
             # Dibujar proyectiles
@@ -2944,8 +2949,9 @@ class Game:
             for enemy in self.enemies:
                 enemy.draw(self.screen)
             
-            # Dibujar explosiones
-            for explosion in self.explosions:
+            # Dibujar explosiones (limitar a 5 en web para mejor rendimiento)
+            max_explosions = 5 if IS_WEB else 999
+            for explosion in self.explosions[:max_explosions]:
                 explosion.draw(self.screen)
             
             # Dibujar proyectiles
