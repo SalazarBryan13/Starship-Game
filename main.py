@@ -16,10 +16,18 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
+# Detectar si estamos en web
+IS_WEB = os.environ.get('PYGBAG', '').lower() == 'true'
+
 # Inicializar Pygame
 pygame.init()
-# Configuración mejorada del mixer para mejor calidad de sonido
-pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=1024)
+# Configuración del mixer optimizada para web
+if IS_WEB:
+    # Configuración reducida para mejor rendimiento en web
+    pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
+else:
+    # Configuración mejorada para desktop
+    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=1024)
 pygame.mixer.init()
 
 # Importar la clase Game desde el módulo game

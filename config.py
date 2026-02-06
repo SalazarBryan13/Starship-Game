@@ -4,11 +4,23 @@ Configuración y constantes del juego Nave Matemática
 """
 
 import pygame
+import os
+import sys
 
 # Constantes del juego
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 600
 FPS = 60
+
+# Detectar si estamos ejecutando en web (Pygbag)
+# Pygbag establece ciertas variables de entorno y características
+IS_WEB = (
+    os.environ.get('PYGBAG', '').lower() == 'true' or
+    'pygbag' in str(sys.modules) or
+    hasattr(sys, '_getframe') and 'emscripten' in str(sys.platform)
+)
+# FPS reducido para web (mejor rendimiento)
+WEB_FPS = 30 if IS_WEB else 60
 
 # Colores mejorados
 BLACK = (0, 0, 0)

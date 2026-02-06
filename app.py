@@ -5,9 +5,20 @@ Sirve el juego compilado con Pygbag
 """
 
 import os
-from flask import Flask, send_from_directory, send_file, abort
+from flask import Flask, send_from_directory, send_file, abort, Response
+from functools import wraps
 
 app = Flask(__name__)
+
+# Configurar cache y compresión para mejor rendimiento
+@app.after_request
+def after_request(response):
+    """Agregar headers de cache y compresión"""
+    # Cache para archivos estáticos
+    if response.content_type and any(ext in response.content_type for ext in ['javascript', 'css', 'image', 'font']):
+        response.cache_control.max_age = 3600  # 1 hora
+        response.cache_control.public = True
+    return response
 
 # Directorio donde se compilará el juego con Pygbag
 BUILD_DIR = os.path.join(os.path.dirname(__file__), 'build', 'web')

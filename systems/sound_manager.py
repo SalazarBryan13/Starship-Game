@@ -26,9 +26,15 @@ class SoundManager:
     """Gestor de sonidos profesionales del juego usando scipy y numpy"""
     
     def __init__(self):
+        # Detectar si estamos en web para optimizar
+        import sys
+        import os
+        self.is_web = os.environ.get('PYGBAG', '').lower() == 'true' or 'pygbag' in str(sys.modules)
+        
         self.sounds = {}
         self.music_playing = False
-        self.sample_rate = 44100  # Calidad CD
+        # Reducir sample rate en web para mejor rendimiento
+        self.sample_rate = 22050 if self.is_web else 44100  # Calidad reducida en web
         self.current_music = None
         self.current_level = 1
         self.music_channel = None

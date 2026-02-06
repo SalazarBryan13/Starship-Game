@@ -12,7 +12,7 @@ import sys
 from utils.resource import resource_path, writable_path
 
 from config import (
-    SCREEN_WIDTH, SCREEN_HEIGHT, FPS,
+    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, IS_WEB, WEB_FPS,
     BLACK, WHITE, RED, DARK_RED, GREEN, DARK_GREEN,
     BLUE, DARK_BLUE, YELLOW, GOLD, ORANGE, PURPLE, CYAN, PINK, SILVER,
     DARK_PURPLE, STAR_COLOR,
@@ -98,8 +98,10 @@ class Game:
         self._init_menu_buttons()
         
         # Generar estrellas de fondo (fijas)
+        # Reducir cantidad en modo web para mejor rendimiento
+        num_stars = 50 if IS_WEB else 100
         self.stars = []
-        for _ in range(100):
+        for _ in range(num_stars):
             self.stars.append((
                 random.randint(0, SCREEN_WIDTH),
                 random.randint(0, SCREEN_HEIGHT),
@@ -131,21 +133,31 @@ class Game:
         self.answer_feedback_color = None   # Color del borde (GREEN o RED)
         self.answer_feedback_max = 45       # Tiempo máximo del efecto (0.75 segundos)
         
-        # Partículas del menú para animación dinámica - MÁS IMPACTANTE
+        # Partículas del menú para animación dinámica
+        # Reducir cantidad en modo web para mejor rendimiento
         self.menu_particles = []
-        # Estrellas fugaces - MUCHAS MÁS
-        for _ in range(15):
-            self.menu_particles.append(MenuParticle('star'))
-        # Polvo cósmico
-        for _ in range(50):
-            self.menu_particles.append(MenuParticle('dust'))
-        # Chispas de energía - MUCHAS MÁS
-        for _ in range(25):
-            self.menu_particles.append(MenuParticle('spark'))
+        if IS_WEB:
+            # Versión optimizada para web (menos partículas)
+            for _ in range(5):
+                self.menu_particles.append(MenuParticle('star'))
+            for _ in range(15):
+                self.menu_particles.append(MenuParticle('dust'))
+            for _ in range(8):
+                self.menu_particles.append(MenuParticle('spark'))
+        else:
+            # Versión completa para desktop
+            for _ in range(15):
+                self.menu_particles.append(MenuParticle('star'))
+            for _ in range(50):
+                self.menu_particles.append(MenuParticle('dust'))
+            for _ in range(25):
+                self.menu_particles.append(MenuParticle('spark'))
         
-        # Símbolos matemáticos flotantes - MÁS GRANDES Y VISIBLES
+        # Símbolos matemáticos flotantes
+        # Reducir cantidad en modo web
+        num_symbols = 6 if IS_WEB else 12
         self.floating_math_symbols = []
-        for _ in range(12):
+        for _ in range(num_symbols):
             symbol = FloatingMathSymbol()
             symbol.y = random.randint(100, SCREEN_HEIGHT - 100)
             self.floating_math_symbols.append(symbol)
@@ -3030,7 +3042,8 @@ class Game:
             self.handle_input(keys, events)
             self.update()
             self.draw()
-            self.clock.tick(FPS)
+            # Usar FPS reducido en web para mejor rendimiento
+            self.clock.tick(WEB_FPS)
             
             # Yield control al navegador (requerido por Pygbag)
             await asyncio.sleep(0)
